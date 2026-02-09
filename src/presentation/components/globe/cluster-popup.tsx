@@ -110,11 +110,13 @@ export function ClusterPopup({
   onNavigate,
   onClose,
 }: ClusterPopupProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const currentIndex = useRef(0);
   const gsapCtx = useRef<gsap.Context | null>(null);
+  const isClosing = useRef(false);
 
   // Drag state refs (no React state — per-frame updates)
   const isDragging = useRef(false);
@@ -294,7 +296,7 @@ export function ClusterPopup({
     [renderIndex, groups, groupCount],
   );
 
-  // Setup GSAP context and initial positioning
+  // Setup GSAP context, initial positioning, and entry animation
   useEffect(() => {
     if (groupCount === 0) return;
 
@@ -303,6 +305,32 @@ export function ClusterPopup({
     const startIndex = Math.floor(groupCount / 2);
     currentIndex.current = startIndex;
     setRenderIndex(startIndex);
+
+    // Entry animation: container fades in + scales up
+    const wrapper = wrapperRef.current;
+    if (wrapper) {
+      gsap.fromTo(
+        wrapper,
+        { opacity: 0, scale: 0.9 },
+        { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.7)" },
+      );
+    }
+
+    // Cards stagger in from below (target the inner .group-card elements so
+    // updatePositions' transform writes on the wrapper divs don't conflict)
+    requestAnimationFrame(() => {
+      const container = containerRef.current;
+      if (container) {
+        const groupCards = container.querySelectorAll(".group-card");
+        if (groupCards.length > 0) {
+          gsap.fromTo(
+            groupCards,
+            { y: 20, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.3, stagger: 0.05, ease: "power2.out" },
+          );
+        }
+      }
+    });
 
     return () => {
       gsapCtx.current?.revert();
@@ -316,18 +344,24 @@ export function ClusterPopup({
     });
   }, [updatePositions]);
 
-  // Focus close button on mount
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
+  /** Exit animation then call onClose */
+  const handleClose = useCallback(() => {
+    if (isClosing.current) return;
+    isClosing.current = true;
 
-  // Escape to close (document-level so it works regardless of focus)
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      onClose();
+      return;
+    }
+
+    gsap.to(wrapper, {
+      opacity: 0,
+      scale: 0.9,
+      duration: 0.2,
+      ease: "power2.in",
+      onComplete: () => onClose(),
+    });
   }, [onClose]);
 
   /** Keyboard navigation on the carousel container */
@@ -355,17 +389,31 @@ export function ClusterPopup({
     [snapToIndex, groups, groupCount, onNavigate],
   );
 
+  // Focus close button on mount
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  // Escape to close (document-level so it works regardless of focus)
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose();
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [handleClose]);
+
   if (groupCount === 0) return null;
 
   return (
-    <div className="relative flex items-center justify-center w-full max-w-7xl mx-auto px-4 z-10!">
+    <div ref={wrapperRef} className="relative flex items-center justify-center w-full max-w-7xl mx-auto px-4 z-10!">
       {/* Close Button */}
       <button
         ref={closeButtonRef}
         aria-label="Close popup"
         onClick={(e) => {
           e.stopPropagation();
-          onClose();
+          handleClose();
         }}
         className="absolute -top-16 right-4 text-white/60 hover:text-white transition-colors bg-black/50 p-2 rounded-full z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       >
