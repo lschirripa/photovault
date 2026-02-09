@@ -105,7 +105,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001 (GSAP context setup). The exit animation means onClose is NOT called immediately — the tween's onComplete calls it. This requires changing the close button and Escape handler to use the new handleClose. Entry stagger: gsap.fromTo each visible card with y: 20 → 0, stagger: 0.05."
     }
   ]

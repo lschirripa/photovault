@@ -17,6 +17,9 @@ Started: lunes,  9 de febrero de 2026, 20:02:42 -03
 - `touch-none` CSS class on container prevents browser touch scroll interference
 - Two-tap pattern: `handleCardClick(slot)` checks `dragDistance > 5` then `logicalIndex === Math.round(currentIndex)` to decide snap vs navigate
 - Keyboard nav: `handleKeyDown` on container — Arrow Left/Right +-1 via `snapToIndex`, Enter/Space navigates centered card, Escape on document level
+- Entry/exit animations: `wrapperRef` for container-level fade+scale, `.group-card` class selector for card stagger (avoids conflict with `updatePositions` transform writes)
+- Exit pattern: `handleClose()` with `isClosing` ref guard → `gsap.to(wrapper, {opacity:0, scale:0.9})` → `onComplete: onClose()`
+- All `useCallback` hooks must be defined before any `useEffect` that references them in its dependency array
 
 ---
 
@@ -77,4 +80,20 @@ Started: lunes,  9 de febrero de 2026, 20:02:42 -03
   - Reusing `snapToIndex(ci ± 1, 0.4)` for keyboard nav keeps behavior consistent with drag release
   - `Math.round(currentIndex.current)` before ±1 ensures correct integer step even if mid-tween
   - `e.preventDefault()` on arrow keys prevents page scroll when carousel is focused
+---
+
+## 2026-02-09 - US-005
+- Added entry animation: wrapper fades in (opacity 0→1) + scales (0.9→1.0) with `back.out(1.7)` ease, 0.3s
+- Cards stagger in from below: targets `.group-card` inner elements (not position wrappers) to avoid conflict with `updatePositions` per-frame transforms
+- Added exit animation via `handleClose()`: wrapper fades out + scales down (0.2s, power2.in), then calls `onClose` in `onComplete`
+- `isClosing` ref prevents double-close from rapid Escape + button clicks
+- Close button and Escape handler both routed through `handleClose` instead of calling `onClose` directly
+- Added `wrapperRef` on outer container div for animation targeting
+- Reorganized hook order: all `useCallback` definitions before any `useEffect` that depends on them
+- Files changed: `src/presentation/components/globe/cluster-popup.tsx`
+- **Learnings for future iterations:**
+  - Animating inner `.group-card` elements avoids conflict with per-frame `card.style.transform` writes on position wrapper divs
+  - `isClosing` ref guard is essential — without it, Escape key can trigger multiple exit animations
+  - `useCallback` must be defined BEFORE any `useEffect` that references it in deps — otherwise the effect closure captures `undefined`
+  - `back.out(1.7)` ease gives a subtle bounce that feels premium without being distracting
 ---
