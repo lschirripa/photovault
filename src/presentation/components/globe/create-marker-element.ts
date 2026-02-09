@@ -8,7 +8,7 @@ export interface ClusterMarkerData {
 }
 
 const THUMB_SIZE = 40;
-const STACK_OFFSET = 8;
+const STACK_OFFSET = 4;
 const MAX_VISIBLE_STACKED = 3;
 const MAX_FAN_OUT = 8;
 const FAN_RADIUS = 50;
@@ -23,7 +23,9 @@ function createThumbnailCircle(url: string, size: number): HTMLElement {
     border: 2px solid white;
     box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     position: absolute;
-    transition: left 200ms ease-out, top 200ms ease-out, opacity 200ms ease-out;
+    left: 0;
+    top: 0;
+    transition: transform 200ms ease-out, opacity 200ms ease-out;
     cursor: pointer;
   `;
 
@@ -43,10 +45,14 @@ function createThumbnailCircle(url: string, size: number): HTMLElement {
 }
 
 /** Creates a marker element for a single point or a cluster of points. */
-export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
+export function createMarkerElement(
+  data: ClusterMarkerData,
+  onNavigate: (path: string) => void
+): HTMLElement {
   const count = data.points.length;
   const visibleStacked = Math.min(count, MAX_VISIBLE_STACKED);
-  const stackedWidth = THUMB_SIZE + (visibleStacked - 1) * STACK_OFFSET;
+  const stackedSize =
+    THUMB_SIZE + (visibleStacked - 1) * STACK_OFFSET;
 
   // Wrapper needs to be large enough for fan-out
   const wrapperSize = (FAN_RADIUS + THUMB_SIZE) * 2;
@@ -67,8 +73,8 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    width: ${stackedWidth}px;
-    height: ${THUMB_SIZE}px;
+    width: ${stackedSize}px;
+    height: ${stackedSize}px;
     pointer-events: auto;
     cursor: pointer;
   `;
@@ -80,8 +86,7 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
     const url = data.thumbnailUrls[0];
     if (url) {
       const circle = createThumbnailCircle(url, THUMB_SIZE);
-      circle.style.left = "0";
-      circle.style.top = "0";
+      circle.style.transform = "translate(0px, 0px)";
       circle.style.zIndex = "1";
       inner.appendChild(circle);
       thumbnails.push(circle);
@@ -96,17 +101,18 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
 
       const circle = createThumbnailCircle(url, THUMB_SIZE);
 
-      // Stacked position: only first MAX_VISIBLE_STACKED are visible
+      // Stacked position: pile on top of each other with slight diagonal offset
       if (i < MAX_VISIBLE_STACKED) {
         const offsetX = i * STACK_OFFSET;
-        circle.style.left = `${offsetX}px`;
-        circle.style.top = "0";
+        const offsetY = i * STACK_OFFSET;
+        circle.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
         circle.style.zIndex = String(i + 1);
         circle.style.opacity = "1";
       } else {
-        // Hidden in stack
-        circle.style.left = `${(MAX_VISIBLE_STACKED - 1) * STACK_OFFSET}px`;
-        circle.style.top = "0";
+        // Hidden in stack — same position as topmost visible
+        const offsetX = (MAX_VISIBLE_STACKED - 1) * STACK_OFFSET;
+        const offsetY = (MAX_VISIBLE_STACKED - 1) * STACK_OFFSET;
+        circle.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
         circle.style.zIndex = String(i + 1);
         circle.style.opacity = "0";
       }
@@ -117,10 +123,13 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
       const fanY = Math.sin(angle) * FAN_RADIUS;
       circle.dataset.fanX = String(fanX);
       circle.dataset.fanY = String(fanY);
-      circle.dataset.stackLeft =
-        i < MAX_VISIBLE_STACKED
-          ? `${i * STACK_OFFSET}px`
-          : `${(MAX_VISIBLE_STACKED - 1) * STACK_OFFSET}px`;
+
+      // Store stacked transform values
+      if (i < MAX_VISIBLE_STACKED) {
+        circle.dataset.stackTransform = `translate(${i * STACK_OFFSET}px, ${i * STACK_OFFSET}px)`;
+      } else {
+        circle.dataset.stackTransform = `translate(${(MAX_VISIBLE_STACKED - 1) * STACK_OFFSET}px, ${(MAX_VISIBLE_STACKED - 1) * STACK_OFFSET}px)`;
+      }
       circle.dataset.stackOpacity = i < MAX_VISIBLE_STACKED ? "1" : "0";
       circle.dataset.pointIndex = String(i);
 
@@ -132,7 +141,7 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
     let moreIndicator: HTMLElement | null = null;
     if (count > MAX_FAN_OUT) {
       moreIndicator = document.createElement("div");
-      moreIndicator.textContent = `+${count - MAX_FAN_OUT + 1} more`;
+      moreIndicator.textContent = `+${count - MAX_FAN_OUT} more`;
       moreIndicator.style.cssText = `
         position: absolute;
         font-size: 10px;
@@ -191,8 +200,7 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
       for (const thumb of thumbnails) {
         const fanX = parseFloat(thumb.dataset.fanX ?? "0");
         const fanY = parseFloat(thumb.dataset.fanY ?? "0");
-        thumb.style.left = `${centerX + fanX}px`;
-        thumb.style.top = `${centerY + fanY}px`;
+        thumb.style.transform = `translate(${centerX + fanX}px, ${centerY + fanY}px)`;
         thumb.style.opacity = "1";
         thumb.style.zIndex = "10";
       }
@@ -204,12 +212,11 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
     const stackUp = () => {
       isFanned = false;
 
-      inner.style.width = `${stackedWidth}px`;
-      inner.style.height = `${THUMB_SIZE}px`;
+      inner.style.width = `${stackedSize}px`;
+      inner.style.height = `${stackedSize}px`;
 
       for (const thumb of thumbnails) {
-        thumb.style.left = thumb.dataset.stackLeft ?? "0";
-        thumb.style.top = "0";
+        thumb.style.transform = thumb.dataset.stackTransform ?? "translate(0px, 0px)";
         thumb.style.opacity = thumb.dataset.stackOpacity ?? "1";
         const idx = parseInt(thumb.dataset.pointIndex ?? "0", 10);
         thumb.style.zIndex = String(idx + 1);
@@ -229,7 +236,7 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
         const idx = parseInt(thumb.dataset.pointIndex ?? "0", 10);
         const point = data.points[idx];
         if (point) {
-          window.location.href = `/groups/${point.groupId}`;
+          onNavigate(`/groups/${point.groupId}`);
         }
       });
     }
@@ -240,7 +247,7 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
       e.stopPropagation();
       const groupIds = new Set(data.points.map((p) => p.groupId));
       if (groupIds.size === 1) {
-        window.location.href = `/groups/${data.points[0]!.groupId}`;
+        onNavigate(`/groups/${data.points[0]!.groupId}`);
       } else {
         // Mixed groups — fan out to let user pick
         fanOut();
@@ -252,7 +259,7 @@ export function createMarkerElement(data: ClusterMarkerData): HTMLElement {
   if (count === 1) {
     inner.addEventListener("click", (e) => {
       e.stopPropagation();
-      window.location.href = `/groups/${data.points[0]!.groupId}`;
+      onNavigate(`/groups/${data.points[0]!.groupId}`);
     });
   }
 

@@ -16,7 +16,7 @@ export interface GeoPoint {
 
 export function useGeoMedia() {
   const [points, setPoints] = useState<GeoPoint[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchedRef = useRef(false);
 

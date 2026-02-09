@@ -47,12 +47,10 @@ export function clusterPoints(
         ) <= distanceThresholdKm
       ) {
         cluster.points.push(point);
-        // Recalculate center as average of all member points
+        // Incremental center update (O(1) instead of O(n))
         const n = cluster.points.length;
-        cluster.center.lat =
-          cluster.points.reduce((sum, p) => sum + p.lat, 0) / n;
-        cluster.center.lng =
-          cluster.points.reduce((sum, p) => sum + p.lng, 0) / n;
+        cluster.center.lat = (cluster.center.lat * (n - 1) + point.lat) / n;
+        cluster.center.lng = (cluster.center.lng * (n - 1) + point.lng) / n;
         added = true;
         break;
       }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import R3fGlobe from "r3f-globe";
@@ -21,10 +22,18 @@ const BUMP_IMAGE_URL =
 export default function PhotoGlobe() {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const router = useRouter();
   const { points, loading } = useGeoMedia();
   const { fetchUrls } = useUrlCache();
   const [clusterData, setClusterData] = useState<ClusterMarkerData[]>([]);
   const [globeReady, setGlobeReady] = useState(false);
+
+  const handleNavigate = useCallback(
+    (path: string) => {
+      router.push(path);
+    },
+    [router]
+  );
 
   const clusters = useMemo(
     () => (points.length > 0 ? clusterPoints(points, 50) : []),
@@ -76,20 +85,39 @@ export default function PhotoGlobe() {
   // Fetch thumbnail URLs for all geo points, then build cluster marker data
   useEffect(() => {
     if (points.length === 0 || clusters.length === 0) return;
+    let cancelled = false;
 
     const assetIds = points.map((p) => p.id);
-    fetchUrls(assetIds, "thumbnail").then((urls) => {
-      const data: ClusterMarkerData[] = clusters.map((cluster) => ({
-        lat: cluster.center.lat,
-        lng: cluster.center.lng,
-        points: cluster.points,
-        thumbnailUrls: cluster.points
-          .map((p) => urls[p.id] ?? "")
-          .filter(Boolean),
-      }));
-      setClusterData(data);
-    });
+    fetchUrls(assetIds, "thumbnail")
+      .then((urls) => {
+        if (cancelled) return;
+        const data: ClusterMarkerData[] = clusters.map((cluster) => ({
+          lat: cluster.center.lat,
+          lng: cluster.center.lng,
+          points: cluster.points,
+          thumbnailUrls: cluster.points
+            .map((p) => urls[p.id] ?? "")
+            .filter(Boolean),
+        }));
+        setClusterData(data);
+      })
+      .catch(() => {
+        // fetchUrls handles errors internally
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [points, clusters, fetchUrls]);
+
+  // Cleanup idle timer on unmount
+  useEffect(() => {
+    return () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleInteractionStart = useCallback(() => {
     if (controlsRef.current) {
@@ -163,7 +191,7 @@ export default function PhotoGlobe() {
           htmlLng="lng"
           htmlAltitude={0.01}
           htmlElement={(d: object) =>
-            createMarkerElement(d as ClusterMarkerData)
+            createMarkerElement(d as ClusterMarkerData, handleNavigate)
           }
           htmlTransitionDuration={500}
           labelsData={labelsData}
