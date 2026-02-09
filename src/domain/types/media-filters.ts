@@ -17,6 +17,7 @@ export interface MediaFilters {
   locationCity?: string;
   minSizeBytes?: number;
   maxSizeBytes?: number;
+  personIds?: string[];
 }
 
 export const DEFAULT_SORT: MediaSort = {
@@ -53,7 +54,8 @@ export function isFiltersActive(filters: MediaFilters): boolean {
     filters.locationState ||
     filters.locationCity ||
     filters.minSizeBytes ||
-    filters.maxSizeBytes
+    filters.maxSizeBytes ||
+    (filters.personIds && filters.personIds.length > 0)
   );
 }
 
@@ -67,5 +69,6 @@ export function countActiveFilters(filters: MediaFilters): number {
   if (filters.locationState) count++;
   if (filters.locationCity) count++;
   if (filters.minSizeBytes !== undefined || filters.maxSizeBytes !== undefined) count++;
+  if (filters.personIds && filters.personIds.length > 0) count++;
   return count;
 }

@@ -5,6 +5,7 @@ import Image from "next/image";
 import type { MediaAsset } from "@/domain/entities/media-asset";
 import { cn } from "@/lib/utils";
 import { MetadataPanel } from "./metadata-panel";
+import { FaceTags } from "./face-tags";
 
 interface LightboxProps {
   media: MediaAsset[];
@@ -16,6 +17,7 @@ interface LightboxProps {
   onDownload: (assetId: string) => void;
   onDelete?: (asset: MediaAsset) => void;
   canDelete?: (asset: MediaAsset) => boolean;
+  groupId?: string;
 }
 
 export function Lightbox({
@@ -28,6 +30,7 @@ export function Lightbox({
   onDownload,
   onDelete,
   canDelete,
+  groupId,
 }: LightboxProps) {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -324,6 +327,11 @@ export function Lightbox({
           onClose={() => setShowInfo(false)}
         />
       </div>
+
+      {/* Face tags */}
+      {groupId && currentMedia && (
+        <FaceTags assetId={currentMedia.id} groupId={groupId} />
+      )}
 
       {/* Thumbnail strip */}
       <div className="p-4 overflow-x-auto">

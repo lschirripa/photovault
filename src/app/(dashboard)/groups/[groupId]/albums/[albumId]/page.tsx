@@ -417,6 +417,7 @@ export default function AlbumDetailPage() {
         onDownload={downloadSingle}
         onDelete={setDeleteTarget}
         canDelete={canDeleteMedia}
+        groupId={groupId}
       />
 
       {/* Delete Confirmation */}

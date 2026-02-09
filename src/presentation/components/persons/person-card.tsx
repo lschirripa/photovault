@@ -10,9 +10,11 @@ interface PersonCardProps {
   groupId: string;
   onRename: (personId: string, name: string) => Promise<boolean>;
   onDismiss: (personId: string) => Promise<boolean>;
+  selected?: boolean;
+  onToggleSelect?: (personId: string) => void;
 }
 
-export function PersonCard({ person, groupId, onRename, onDismiss }: PersonCardProps) {
+export function PersonCard({ person, groupId, onRename, onDismiss, selected, onToggleSelect }: PersonCardProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(person.name || "");
 
@@ -22,38 +24,55 @@ export function PersonCard({ person, groupId, onRename, onDismiss }: PersonCardP
     if (ok) setEditing(false);
   };
 
+  const avatarContent = (
+    <div
+      className={`w-full aspect-square rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800 mx-auto mb-2 relative transition-all ${
+        selected ? "ring-3 ring-blue-500 ring-offset-2 dark:ring-offset-gray-900" : ""
+      }`}
+    >
+      {person.faceCropUrl ? (
+        <Image
+          src={person.faceCropUrl}
+          alt={person.name || "Unknown person"}
+          fill
+          unoptimized
+          className="object-cover"
+          sizes="120px"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <svg
+            className="w-10 h-10 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+            />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="group relative text-center">
-      <Link href={`/groups/${groupId}/people/${person.id}`}>
-        <div className="w-full aspect-square rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800 mx-auto mb-2 relative">
-          {person.faceCropUrl ? (
-            <Image
-              src={person.faceCropUrl}
-              alt={person.name || "Unknown person"}
-              fill
-              unoptimized
-              className="object-cover"
-              sizes="120px"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <svg
-                className="w-10 h-10 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                />
-              </svg>
-            </div>
-          )}
-        </div>
-      </Link>
+      {onToggleSelect ? (
+        <button
+          onClick={() => onToggleSelect(person.id)}
+          className="w-full cursor-pointer"
+        >
+          {avatarContent}
+        </button>
+      ) : (
+        <Link href={`/groups/${groupId}/people/${person.id}`}>
+          {avatarContent}
+        </Link>
+      )}
 
       {editing ? (
         <div className="flex gap-1 items-center justify-center">
@@ -88,6 +107,16 @@ export function PersonCard({ person, groupId, onRename, onDismiss }: PersonCardP
       <p className="text-xs text-gray-500">
         {person.faceCount} photo{person.faceCount !== 1 ? "s" : ""}
       </p>
+
+      {onToggleSelect && (
+        <Link
+          href={`/groups/${groupId}/people/${person.id}`}
+          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          View all
+        </Link>
+      )}
 
       {/* Dismiss button on hover */}
       <button

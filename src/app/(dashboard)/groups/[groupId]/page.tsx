@@ -168,7 +168,14 @@ export default function GroupDetailPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [filters, setFilters] = useState<MediaFilters>({});
   const [sort, setSort] = useState<MediaSort>(DEFAULT_SORT);
+  const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
   const supabase = createClient();
+
+  // Combine explicit filters with person selection
+  const combinedFilters = useMemo<MediaFilters>(() => {
+    if (selectedPersonIds.length === 0) return filters;
+    return { ...filters, personIds: selectedPersonIds };
+  }, [filters, selectedPersonIds]);
 
   // Infinite media pagination
   const {
@@ -181,7 +188,7 @@ export default function GroupDetailPage() {
     refresh: refreshMedia,
     removeItems,
     updateItems,
-  } = useInfiniteMedia({ groupId, filters, sort });
+  } = useInfiniteMedia({ groupId, filters: combinedFilters, sort });
 
   const { cameras, locationData, hasAnyLocation, dateRange, fetchLocationChildren } = useMediaFilterOptions(groupId);
 
@@ -659,6 +666,14 @@ export default function GroupDetailPage() {
                 groupId={groupId}
                 onRename={renamePerson}
                 onDismiss={dismissPerson}
+                selected={selectedPersonIds.includes(person.id)}
+                onToggleSelect={(personId) => {
+                  setSelectedPersonIds((prev) =>
+                    prev.includes(personId)
+                      ? prev.filter((id) => id !== personId)
+                      : [...prev, personId]
+                  );
+                }}
               />
             ))}
           </div>
@@ -680,6 +695,23 @@ export default function GroupDetailPage() {
           dateRange={dateRange}
           fetchLocationChildren={fetchLocationChildren}
         />
+
+      {selectedPersonIds.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-sm">
+            Filtering by {selectedPersonIds.length} {selectedPersonIds.length === 1 ? "person" : "people"}
+            <button
+              onClick={() => setSelectedPersonIds([])}
+              className="ml-1 hover:text-blue-600 dark:hover:text-blue-100"
+              title="Clear person filter"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </span>
+        </div>
+      )}
 
       {uploads.length > 0 && (
         <div className="mb-6 space-y-2">
@@ -704,13 +736,13 @@ export default function GroupDetailPage() {
       )}
 
       {media.length === 0 ? (
-        isFiltersActive(filters) ? (
+        isFiltersActive(combinedFilters) ? (
           <div className="text-center py-12">
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               No media matches your filters
             </p>
             <button
-              onClick={() => setFilters({})}
+              onClick={() => { setFilters({}); setSelectedPersonIds([]); }}
               className="text-blue-600 hover:underline"
             >
               Clear filters
@@ -821,6 +853,7 @@ export default function GroupDetailPage() {
         onDownload={downloadSingle}
         onDelete={setDeleteTarget}
         canDelete={canDeleteMedia}
+        groupId={groupId}
       />
 
       {/* Single Delete Confirmation Dialog */}
