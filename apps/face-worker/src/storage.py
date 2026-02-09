@@ -124,6 +124,21 @@ def claim_jobs() -> list[dict[str, Any]]:
     return result.data or []
 
 
+def get_queue_stats() -> dict[str, int]:
+    """Return counts of face_jobs by status."""
+    sb = get_supabase()
+    counts: dict[str, int] = {"pending": 0, "in_progress": 0, "completed": 0, "failed": 0}
+    for status in counts:
+        result = (
+            sb.table("face_jobs")
+            .select("id", count="exact")
+            .eq("status", status)
+            .execute()
+        )
+        counts[status] = result.count or 0
+    return counts
+
+
 def complete_job(job_id: str) -> None:
     """Mark a job as completed."""
     sb = get_supabase()
