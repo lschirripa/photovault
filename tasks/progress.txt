@@ -16,6 +16,7 @@ Started: lunes,  9 de febrero de 2026, 20:02:42 -03
 - `dragDistance` ref tracks pixel displacement for click vs drag threshold (5px)
 - `touch-none` CSS class on container prevents browser touch scroll interference
 - Two-tap pattern: `handleCardClick(slot)` checks `dragDistance > 5` then `logicalIndex === Math.round(currentIndex)` to decide snap vs navigate
+- Keyboard nav: `handleKeyDown` on container — Arrow Left/Right +-1 via `snapToIndex`, Enter/Space navigates centered card, Escape on document level
 
 ---
 
@@ -62,4 +63,18 @@ Started: lunes,  9 de febrero de 2026, 20:02:42 -03
   - The slot-to-logical-index mapping is `renderIndex + (slot - HALF_SLOTS)` — same formula used in `getSlotGroup`
   - `dragDistance` ref from US-002 is the key bridge between drag and click behavior
   - The 5px threshold effectively prevents accidental navigation during micro-drags
+---
+
+## 2026-02-09 - US-004
+- Added keyboard navigation via `handleKeyDown` on the carousel container
+- Arrow Left/Right: snap to `currentIndex ± 1` with 0.4s power2.out animation via `snapToIndex`
+- Enter/Space: navigate to centered card's group (`/groups/${groupId}`)
+- Escape: handled at document level (already existed from US-001)
+- Container already had `role='region'`, `aria-roledescription='carousel'`, `aria-label`, and `tabIndex={0}` from US-001
+- Close button already receives focus on mount from US-001
+- Files changed: `src/presentation/components/globe/cluster-popup.tsx`
+- **Learnings for future iterations:**
+  - Reusing `snapToIndex(ci ± 1, 0.4)` for keyboard nav keeps behavior consistent with drag release
+  - `Math.round(currentIndex.current)` before ±1 ensures correct integer step even if mid-tween
+  - `e.preventDefault()` on arrow keys prevents page scroll when carousel is focused
 ---

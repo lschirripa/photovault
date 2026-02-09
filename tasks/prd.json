@@ -86,7 +86,7 @@
         "npm run build succeeds"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001 (currentIndex tween system). Reuses the same gsap.to(currentIndex, ...) pattern. Arrow keys kill any active tween before starting a new one."
     },
     {
