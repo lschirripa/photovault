@@ -1,0 +1,94 @@
+{
+  "project": "PhotoVault",
+  "branchName": "ralph/photo-globe",
+  "description": "Fix globe marker rendering by switching from r3f-globe to react-globe.gl which manages CSS2DRenderer automatically",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Install react-globe.gl",
+      "description": "As a developer, I need react-globe.gl installed so the globe component can use its built-in CSS2DRenderer for HTML marker rendering.",
+      "acceptanceCriteria": [
+        "Run: npm install react-globe.gl",
+        "react-globe.gl is installed successfully",
+        "npm run type-check passes",
+        "npm run build succeeds",
+        "Do NOT uninstall r3f-globe or @react-three/fiber or @react-three/drei yet"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "react-globe.gl wraps the same three-globe core as r3f-globe but manages the full rendering pipeline including CSS2DRenderer"
+    },
+    {
+      "id": "US-002",
+      "title": "Rewrite photo-globe.tsx to use react-globe.gl Globe component",
+      "description": "As a developer, I need to replace the R3F Canvas + r3f-globe setup with react-globe.gl's standalone Globe component which handles WebGLRenderer + CSS2DRenderer internally.",
+      "acceptanceCriteria": [
+        "Replace R3F imports (Canvas from @react-three/fiber, OrbitControls from @react-three/drei, R3fGlobe from r3f-globe, OrbitControlsImpl from three-stdlib) with: import Globe from 'react-globe.gl' (default import)",
+        "Do NOT wrap Globe in <Canvas> — react-globe.gl creates its own canvas internally",
+        "Remove <ambientLight>, <directionalLight>, <OrbitControls> — react-globe.gl manages these",
+        "Use useRef<any>(null) for the Globe ref (globeEl)",
+        "Set Globe props: globeImageUrl, bumpImageUrl, showAtmosphere={true}, atmosphereColor='lightskyblue', atmosphereAltitude={0.2}, backgroundColor='#0a0a0a'",
+        "For sizing: measure the container div using a ref and ResizeObserver, pass width and height as number props to Globe. Or use the window inner dimensions minus nav height (56px)",
+        "After globe mounts (useEffect with globeEl.current check): set globeEl.current.controls().autoRotate = true, autoRotateSpeed = 0.5, enablePan = false, minDistance = 120, maxDistance = 800",
+        "Auto-rotation pause on interaction: globeEl.current.controls().addEventListener('start', ...) to set autoRotate=false, addEventListener('end', ...) to resume after 3s idle setTimeout",
+        "Set initial point of view: globeEl.current.pointOfView({ altitude: 2.5 }) after mount",
+        "Keep globe fade-in: opacity 0→1 container div with onGlobeReady callback setting state to true",
+        "Keep empty state: if (!loading && points.length === 0) return 'No photos with location data yet' message",
+        "CRITICAL: All hooks (useState, useRef, useCallback, useMemo, useEffect) must be declared BEFORE any early return statement",
+        "The parent page src/app/(dashboard)/map/page.tsx already uses next/dynamic with { ssr: false } — verify it still imports correctly",
+        "npm run type-check passes",
+        "npm run build succeeds"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "react-globe.gl is NOT an R3F component. It manages its own Three.js scene and renderers. Do NOT use <Canvas>. Access controls via ref: globeEl.current.controls(). The Globe component renders a canvas element directly."
+    },
+    {
+      "id": "US-003",
+      "title": "Wire up HTML markers with htmlElementsData",
+      "description": "As a user, I want to see my photo thumbnails on the globe at their GPS coordinates, rendered as interactive HTML elements using react-globe.gl's built-in CSS2DRenderer.",
+      "acceptanceCriteria": [
+        "Pass htmlElementsData={clusterData} to Globe component (same ClusterMarkerData[] state as before)",
+        "Pass htmlLat='lat' and htmlLng='lng' string accessors",
+        "Pass htmlAltitude={0.01}",
+        "Pass htmlElement accessor: (d) => createMarkerElement(d as ClusterMarkerData, handleNavigate) — reuse existing create-marker-element.ts",
+        "Pass htmlTransitionDuration={500}",
+        "Keep the existing useEffect that fetches thumbnail URLs via useUrlCache and builds clusterData from clusters",
+        "Keep useGeoMedia() hook for fetching geo points",
+        "Keep clusterPoints() from geo-utils.ts for clustering",
+        "CRITICAL: Markers must be VISIBLE on the globe — this is the whole point of switching to react-globe.gl",
+        "Clicking a single marker navigates to /groups/{groupId}",
+        "Hovering a cluster fans out thumbnails, clicking navigates to group",
+        "npm run type-check passes",
+        "npm run build succeeds",
+        "Verify in browser using dev-browser skill — markers must be visible on the globe"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "react-globe.gl automatically sets up CSS2DRenderer, which is why HTML markers will now render. The htmlElement prop signature is identical: (d: object) => HTMLElement. The existing createMarkerElement function should work as-is."
+    },
+    {
+      "id": "US-004",
+      "title": "Wire up labels and verify full functionality",
+      "description": "As a user, I want location labels near photo clusters and full interactive globe functionality.",
+      "acceptanceCriteria": [
+        "Pass labelsData, labelLat='lat', labelLng='lng', labelText='text' to Globe",
+        "labelColor={() => 'rgba(255,255,255,0.6)'}",
+        "labelSize={0.4}, labelAltitude={0.015}, labelDotRadius={0}",
+        "labelsTransitionDuration={500}",
+        "Auto-rotation works: globe slowly spins when idle",
+        "Auto-rotation pauses on user drag/zoom, resumes after 3 seconds",
+        "Pan is disabled (enablePan = false on controls)",
+        "Globe has atmospheric glow effect",
+        "Globe fades in on initial load",
+        "Empty state shows when no geo-tagged photos exist",
+        "npm run type-check passes",
+        "npm run build succeeds",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "react-globe.gl supports the same label props as r3f-globe since they share the three-globe core. labelIncludeDot may or may not be supported — if not, just use labelDotRadius={0}."
+    }
+  ]
+}
