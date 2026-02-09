@@ -237,18 +237,11 @@ export default function PhotoGlobe() {
               });
 
               const groups = Array.from(groupsMap.values());
-              // MOCK FOR TESTING: Duplicate groups to test carousel
-              const testGroups = [...groups, ...groups, ...groups].map(
-                (g, i) => ({
-                  ...g,
-                  groupId: `${g.groupId}-test-${i}`, // Ensure unique keys if used
-                }),
-              );
 
               setSelectedCluster({
                 lat: markerData.lat,
                 lng: markerData.lng,
-                groups: testGroups,
+                groups,
               });
             },
           )
@@ -256,8 +249,14 @@ export default function PhotoGlobe() {
         htmlTransitionDuration={500}
       />}
       {selectedCluster && (
-        <div className="absolute inset-0 z-[50] flex items-center justify-center pointer-events-none">
-          <div className="pointer-events-auto">
+        <div
+          className="absolute inset-0 z-[50] flex items-center justify-center"
+          onClick={() => setSelectedCluster(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Cluster details"
+        >
+          <div onClick={(e) => e.stopPropagation()}>
             <ClusterPopup
               groups={selectedCluster.groups}
               onNavigate={handleNavigate}

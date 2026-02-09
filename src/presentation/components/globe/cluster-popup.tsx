@@ -6,9 +6,9 @@ import Image from "next/image";
 
 interface GroupData {
   groupId: string;
-  groupName: string; // "Sarah Chen"
-  locationCity?: string; // "New York"
-  locationCountry?: string; // "US"
+  groupName: string;
+  locationCity?: string;
+  locationCountry?: string;
   thumbnailUrl?: string | null;
   pointCount: number;
 }
@@ -19,25 +19,28 @@ interface ClusterPopupProps {
   onClose: () => void;
 }
 
-// Sub-component for individual group card
 function GroupCard({
   group,
   onNavigate,
-  stats,
   onClick,
 }: {
   group: GroupData;
   onNavigate: (path: string) => void;
-  stats: { firstSeen: string; sessions: number; events: number };
-  onClick: (e: React.MouseEvent) => void;
+  onClick: () => void;
 }) {
   return (
     <div
-      className="group-card flex-shrink-0 w-[300px] bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6 text-white overflow-hidden snap-center mx-2 transition-transform duration-75 will-change-transform select-none cursor-grab active:cursor-grabbing"
+      role="button"
+      tabIndex={0}
+      className="group-card flex-shrink-0 w-[300px] bg-[#0a0a0a]/95 border border-white/10 rounded-2xl shadow-2xl p-6 text-white overflow-hidden snap-center mx-2 transition-transform duration-75 select-none cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       onClick={onClick}
-      style={{ fontFamily: "var(--font-geist-mono)" }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
-      {/* Content */}
       <div className="flex flex-col items-center pointer-events-none">
         {/* Avatar */}
         <div className="w-16 h-16 rounded-full overflow-hidden mb-3 border-2 border-white/10 shadow-lg relative">
@@ -45,6 +48,7 @@ function GroupCard({
             <Image
               width={64}
               height={64}
+              sizes="64px"
               src={group.thumbnailUrl}
               alt={group.groupName}
               className="w-full h-full object-cover"
@@ -71,57 +75,20 @@ function GroupCard({
 
         {/* View Profile Button */}
         <button
+          aria-label={`View profile for ${group.groupName}`}
           onClick={(e) => {
             e.stopPropagation();
             onNavigate(`/groups/${group.groupId}`);
           }}
-          className="px-4 py-1.5 rounded-full bg-[#1A1A1A] border border-white/10 text-sm text-white hover:bg-white/10 transition-colors mb-6 pointer-events-auto"
+          className="px-4 py-2.5 min-h-[44px] rounded-full bg-[#1A1A1A] border border-white/10 text-sm text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 transition-colors pointer-events-auto"
         >
           View profile
         </button>
 
-        {/* Stats Grid */}
-        <div className="w-full grid grid-cols-3 gap-2 px-2">
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-white/50 uppercase tracking-wider mb-1">
-              First seen
-            </span>
-            <span className="text-xs text-white/90">{stats.firstSeen}</span>
-          </div>
-          <div className="flex flex-col items-center border-l border-white/5 border-r">
-            <span className="text-[10px] text-white/50 uppercase tracking-wider mb-1">
-              Sessions
-            </span>
-            <span className="text-xs text-white/90">{stats.sessions}</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-white/50 uppercase tracking-wider mb-1">
-              Events
-            </span>
-            <span className="text-xs text-white/90">{stats.events}</span>
-          </div>
-        </div>
-
-        {/* Browser Mock Input */}
-        <div className="w-full mt-6 bg-[#1A1A1A] rounded-xl p-2 flex items-center gap-3 border border-white/5">
-          <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
-            <div className="w-2.5 h-2.5 rounded-full border border-white/50"></div>
-          </div>
-          <div className="flex-1 text-xs text-white/80 font-mono">/pricing</div>
-          <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
-        </div>
-
-        {/* Footer Icons */}
-        <div className="w-full mt-3 flex items-center gap-2 text-white/60 text-xs">
-          <div className="w-4 h-4 rounded-full bg-white/90 flex items-center justify-center text-[8px] text-black font-bold">
-            G
-          </div>
-          <span>Google</span>
-          <div className="ml-auto flex gap-2">
-            <div className="w-4 h-4 bg-yellow-500/20 rounded-md"></div>
-            <div className="w-4 h-4 bg-white/10 rounded-md"></div>
-          </div>
-        </div>
+        {/* Photo count */}
+        <p className="mt-4 text-xs text-white/50">
+          {group.pointCount} {group.pointCount === 1 ? "photo" : "photos"}
+        </p>
       </div>
     </div>
   );
@@ -133,16 +100,37 @@ export function ClusterPopup({
   onClose,
 }: ClusterPopupProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const isDragging = useRef(false);
   const startX = useRef(0);
   const scrollLeft = useRef(0);
-  const lastScrollX = useRef(0);
+  const dragDistance = useRef(0);
+  const rafRef = useRef<number>(0);
 
-  // Extend groups for infinite feel
-  const EXTEND_FACTOR = 20;
+  // Extend groups for infinite feel (5x for smooth looping)
+  const EXTEND_FACTOR = 5;
   const extendedGroups = useMemo(() => {
     return Array.from({ length: EXTEND_FACTOR }, () => groups).flat();
   }, [groups]);
+
+  // Escape key to close
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  // Focus close button on mount
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  // Cleanup rAF on unmount
+  useEffect(() => {
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
 
   const updateCardScaling = () => {
     if (!containerRef.current) return;
@@ -150,30 +138,25 @@ export function ClusterPopup({
     const cards = container.querySelectorAll(".group-card");
     const containerWidth = container.offsetWidth;
     const containerCenter = containerWidth / 2;
+    const currentScroll = container.scrollLeft;
 
     cards.forEach((card) => {
       const htmlCard = card as HTMLElement;
-      const rect = htmlCard.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-
-      // Calculate center of card relative to container left
-      const cardCenter = rect.left + rect.width / 2 - containerRect.left;
+      // Use offsetLeft math instead of getBoundingClientRect to avoid reflows
+      const cardCenter =
+        htmlCard.offsetLeft + htmlCard.offsetWidth / 2 - currentScroll;
       const distanceFromCenter = Math.abs(containerCenter - cardCenter);
 
-      // Max distance for full scale down
       const maxDistance = containerWidth / 2;
       const progress = Math.min(distanceFromCenter / maxDistance, 1);
 
-      // Scale from 1.0 at center to 0.8 at the edges
-      const scale = 1 - progress * 0.2;
-      const opacity = 1 - progress * 0.1;
+      // Scale from 1.05 at center to 0.75 at edges
+      const scale = 1.05 - progress * 0.3;
+      const opacity = 1 - progress * 0.3;
 
-      gsap.set(htmlCard, {
-        scale,
-        opacity,
-        transformOrigin: "center center",
-        overwrite: "auto",
-      });
+      // Direct style writes instead of gsap.set for performance
+      htmlCard.style.transform = `scale(${scale})`;
+      htmlCard.style.opacity = String(opacity);
     });
   };
 
@@ -184,7 +167,6 @@ export function ClusterPopup({
     if (cards.length < groups.length * 2) return;
 
     const setSize = groups.length;
-    // Get the width of one complete set of groups by measuring distance between identical items
     const firstInSet = cards[0] as HTMLElement;
     const firstInNextSet = cards[setSize] as HTMLElement;
 
@@ -192,10 +174,9 @@ export function ClusterPopup({
       const setWidth = firstInNextSet.offsetLeft - firstInSet.offsetLeft;
       const scrollWidth = container.scrollWidth;
 
-      // When we've scrolled too far left or right, jump 10 sets (half the EXTEND_FACTOR)
-      const jumpAmount = setWidth * 10;
-      const leftLimit = setWidth * 4;
-      const rightLimit = scrollWidth - setWidth * 4 - container.offsetWidth;
+      const jumpAmount = setWidth * 2;
+      const leftLimit = setWidth;
+      const rightLimit = scrollWidth - setWidth - container.offsetWidth;
 
       if (container.scrollLeft < leftLimit) {
         container.scrollLeft += jumpAmount;
@@ -206,16 +187,58 @@ export function ClusterPopup({
   };
 
   const handleScroll = () => {
-    updateCardScaling();
-    checkLoop();
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      updateCardScaling();
+      checkLoop();
+    });
+  };
+
+  const snapToNearestCard = () => {
+    if (!containerRef.current) return;
+    const container = containerRef.current;
+    const cards = container.querySelectorAll(".group-card");
+    const containerWidth = container.offsetWidth;
+    const containerCenter = containerWidth / 2;
+    const currentScroll = container.scrollLeft;
+
+    let nearestCard: HTMLElement | null = null;
+    let nearestDistance = Infinity;
+
+    cards.forEach((card) => {
+      const htmlCard = card as HTMLElement;
+      const cardCenter =
+        htmlCard.offsetLeft + htmlCard.offsetWidth / 2 - currentScroll;
+      const distance = Math.abs(containerCenter - cardCenter);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestCard = htmlCard;
+      }
+    });
+
+    if (nearestCard) {
+      const el = nearestCard as HTMLElement;
+      const targetScroll =
+        el.offsetLeft + el.offsetWidth / 2 - containerCenter;
+
+      gsap.to(container, {
+        scrollLeft: targetScroll,
+        duration: 0.4,
+        ease: "power2.out",
+        onUpdate: () => {
+          updateCardScaling();
+          checkLoop();
+        },
+      });
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!containerRef.current) return;
     isDragging.current = true;
+    dragDistance.current = 0;
     startX.current = e.pageX - containerRef.current.offsetLeft;
     scrollLeft.current = containerRef.current.scrollLeft;
-    lastScrollX.current = containerRef.current.scrollLeft;
     containerRef.current.style.scrollBehavior = "auto";
   };
 
@@ -223,28 +246,20 @@ export function ClusterPopup({
     if (!isDragging.current || !containerRef.current) return;
     e.preventDefault();
     const x = e.pageX - containerRef.current.offsetLeft;
-    const walk = (x - startX.current) * 1.5; // Drag speed
+    const walk = (x - startX.current) * 1.5;
+    dragDistance.current = Math.abs(walk);
     containerRef.current.scrollLeft = scrollLeft.current - walk;
-    // Scaling and looping are naturally handled by the onScroll listener
-    // but we can call it manually for smoother updates if needed
-    // updateCardScaling();
   };
 
   const handleMouseUp = () => {
+    if (!isDragging.current) return;
     isDragging.current = false;
-    if (containerRef.current) {
-      containerRef.current.style.scrollBehavior = "smooth";
-    }
+    snapToNearestCard();
   };
 
   const handleCardClick = (index: number) => {
     if (!containerRef.current) return;
-
-    // Distinguish between drag and click
-    const currentScroll = containerRef.current.scrollLeft;
-    if (Math.abs(lastScrollX.current - currentScroll) > 10) {
-      return;
-    }
+    if (dragDistance.current > 10) return;
 
     const container = containerRef.current;
     const cards = container.querySelectorAll(".group-card");
@@ -252,19 +267,63 @@ export function ClusterPopup({
 
     if (targetCard) {
       const containerWidth = container.offsetWidth;
-      const cardRect = targetCard.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-
-      const cardCenter =
-        cardRect.left + cardRect.width / 2 - containerRect.left;
       const targetScroll =
-        container.scrollLeft + (cardCenter - containerWidth / 2);
+        targetCard.offsetLeft + targetCard.offsetWidth / 2 - containerWidth / 2;
 
       gsap.to(container, {
         scrollLeft: targetScroll,
         duration: 0.5,
         ease: "power2.out",
-        onUpdate: handleScroll,
+        onUpdate: () => {
+          updateCardScaling();
+          checkLoop();
+        },
+      });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+
+    const cards = container.querySelectorAll(".group-card");
+    const containerWidth = container.offsetWidth;
+    const containerCenter = containerWidth / 2;
+    const currentScroll = container.scrollLeft;
+
+    let nearestIndex = 0;
+    let nearestDistance = Infinity;
+    cards.forEach((card, i) => {
+      const htmlCard = card as HTMLElement;
+      const cardCenter =
+        htmlCard.offsetLeft + htmlCard.offsetWidth / 2 - currentScroll;
+      const dist = Math.abs(containerCenter - cardCenter);
+      if (dist < nearestDistance) {
+        nearestDistance = dist;
+        nearestIndex = i;
+      }
+    });
+
+    const nextIndex =
+      e.key === "ArrowLeft"
+        ? Math.max(0, nearestIndex - 1)
+        : Math.min(cards.length - 1, nearestIndex + 1);
+
+    const targetCard = cards[nextIndex] as HTMLElement;
+    if (targetCard) {
+      const targetScroll =
+        targetCard.offsetLeft + targetCard.offsetWidth / 2 - containerCenter;
+
+      gsap.to(container, {
+        scrollLeft: targetScroll,
+        duration: 0.4,
+        ease: "power2.out",
+        onUpdate: () => {
+          updateCardScaling();
+          checkLoop();
+        },
       });
     }
   };
@@ -272,14 +331,15 @@ export function ClusterPopup({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Animate container in
-    gsap.fromTo(
-      containerRef.current,
-      { opacity: 0, scale: 0.9, y: 10 },
-      { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: "back.out(1.7)" },
-    );
+    // Animate container in with GSAP context for proper cleanup
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        containerRef.current,
+        { opacity: 0, scale: 0.9, y: 10 },
+        { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: "back.out(1.7)" },
+      );
+    }, containerRef);
 
-    // Initial positioning to perfectly center the first card of the middle set
     const container = containerRef.current;
 
     // Small delay to ensure layout is calculated
@@ -290,30 +350,32 @@ export function ClusterPopup({
 
       if (targetCard) {
         const containerWidth = container.offsetWidth;
-        const cardRect = targetCard.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-
-        const cardCenter =
-          cardRect.left + cardRect.width / 2 - containerRect.left;
         container.scrollLeft =
-          container.scrollLeft + (cardCenter - containerWidth / 2);
+          targetCard.offsetLeft +
+          targetCard.offsetWidth / 2 -
+          containerWidth / 2;
 
         updateCardScaling();
       }
     }, 50);
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      ctx.revert();
+      clearTimeout(timeoutId);
+    };
   }, [extendedGroups]);
 
   return (
     <div className="relative flex items-center justify-center w-full max-w-7xl mx-auto px-4">
       {/* Close Button */}
       <button
+        ref={closeButtonRef}
+        aria-label="Close popup"
         onClick={(e) => {
           e.stopPropagation();
           onClose();
         }}
-        className="absolute -top-16 right-4 text-white/60 hover:text-white transition-colors bg-black/50 p-2 rounded-full z-20"
+        className="absolute -top-16 right-4 text-white/60 hover:text-white transition-colors bg-black/50 p-2 rounded-full z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       >
         <svg
           width="24"
@@ -335,6 +397,11 @@ export function ClusterPopup({
       {/* Carousel Container */}
       <div
         ref={containerRef}
+        role="region"
+        aria-roledescription="carousel"
+        aria-label={`${groups.length} group cards`}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
         onScroll={handleScroll}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -349,11 +416,6 @@ export function ClusterPopup({
             group={group}
             onNavigate={onNavigate}
             onClick={() => handleCardClick(idx)}
-            stats={{
-              firstSeen: "Dec 12, 2024",
-              sessions: 14,
-              events: group.pointCount,
-            }}
           />
         ))}
       </div>

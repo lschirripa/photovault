@@ -12,7 +12,7 @@ export interface ClusterMarkerData {
 
 export type GlobeElementData = ClusterMarkerData;
 
-const THUMB_SIZE = 40;
+const THUMB_SIZE = 44; // WCAG recommended touch target size
 const STACK_OFFSET = 4;
 const MAX_VISIBLE_STACKED = 3;
 const MAX_FAN_OUT = 8;
@@ -21,8 +21,10 @@ const FAN_RADIUS = 50;
 function createThumbnailCircle(
   url: string | null | undefined,
   size: number,
+  label?: string,
 ): HTMLElement {
-  const circle = document.createElement("div");
+  const circle = document.createElement("button");
+  if (label) circle.setAttribute("aria-label", label);
   circle.style.cssText = `
     width: ${size}px;
     height: ${size}px;
@@ -34,7 +36,20 @@ function createThumbnailCircle(
     left: 0;
     top: 0;
     cursor: pointer;
+    background: #000;
+    padding: 0;
+    transition: outline 0.2s ease;
   `;
+  circle.style.outline = "none";
+  circle.addEventListener("focus", () => {
+    if (circle.matches(":focus-visible")) {
+      circle.style.outline = "2px solid rgba(255,255,255,0.5)";
+      circle.style.outlineOffset = "2px";
+    }
+  });
+  circle.addEventListener("blur", () => {
+    circle.style.outline = "none";
+  });
 
   if (url) {
     const img = document.createElement("img");
@@ -89,7 +104,13 @@ export function createMarkerElement(
   wrapper.dataset.clusterSize = String(count);
 
   // Inner container for the actual thumbnails — centered in wrapper
-  const inner = document.createElement("div");
+  const inner = document.createElement("button");
+  inner.setAttribute(
+    "aria-label",
+    data.label
+      ? `Cluster in ${data.label}, ${count} items`
+      : `Cluster with ${count} items`,
+  );
   inner.style.cssText = `
     position: absolute;
     left: 50%;
@@ -99,14 +120,32 @@ export function createMarkerElement(
     height: ${stackedSize}px;
     pointer-events: auto;
     cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    transition: outline 0.2s ease;
   `;
+  inner.style.outline = "none";
+  inner.addEventListener("focus", () => {
+    if (inner.matches(":focus-visible")) {
+      inner.style.outline = "2px solid rgba(255,255,255,0.5)";
+      inner.style.outlineOffset = "4px";
+    }
+  });
+  inner.addEventListener("blur", () => {
+    inner.style.outline = "none";
+  });
 
   const thumbnails: HTMLElement[] = [];
 
   if (count === 1) {
     // Single marker
     const url = data.thumbnailUrls[0];
-    const circle = createThumbnailCircle(url, THUMB_SIZE);
+    const circle = createThumbnailCircle(
+      url,
+      THUMB_SIZE,
+      data.label || "Photo",
+    );
     circle.style.transform = "translate(0px, 0px)";
     circle.style.zIndex = "1";
     inner.appendChild(circle);
@@ -117,8 +156,10 @@ export function createMarkerElement(
 
     for (let i = 0; i < fanCount; i++) {
       const url = data.thumbnailUrls[i];
+      const point = data.points[i];
+      const label = point?.groupName || `Item ${i + 1}`;
 
-      const circle = createThumbnailCircle(url, THUMB_SIZE);
+      const circle = createThumbnailCircle(url, THUMB_SIZE, label);
 
       // Stacked position: pile on top of each other with slight diagonal offset
       if (i < MAX_VISIBLE_STACKED) {
@@ -343,6 +384,8 @@ export function createMarkerElement(
 
     inner.addEventListener("mouseenter", fanOut);
     inner.addEventListener("mouseleave", stackUp);
+    inner.addEventListener("focus", fanOut);
+    inner.addEventListener("blur", stackUp);
 
     // Attach click handlers per thumbnail for fanned-out state
     for (const thumb of thumbnails) {
