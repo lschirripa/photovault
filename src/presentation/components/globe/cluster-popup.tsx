@@ -116,6 +116,14 @@ export function ClusterPopup({
   const currentIndex = useRef(0);
   const gsapCtx = useRef<gsap.Context | null>(null);
 
+  // Drag state refs (no React state — per-frame updates)
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartIndex = useRef(0);
+  const dragDistance = useRef(0);
+  const activeTween = useRef<gsap.core.Tween | null>(null);
+  const velocityTracker = useRef<{ x: number; t: number }[]>([]);
+
   // renderIndex drives which group data each slot shows (React state for re-renders).
   // It's only updated when currentIndex snaps to an integer (not per-frame).
   const [renderIndex, setRenderIndex] = useState(0);
@@ -151,6 +159,110 @@ export function ClusterPopup({
       card.style.zIndex = String(zIndex);
     }
   }, [groupCount, renderIndex]);
+
+  /** Animate currentIndex to a target integer, updating positions per-frame */
+  const snapToIndex = useCallback(
+    (targetIndex: number, duration: number = 0.5) => {
+      activeTween.current?.kill();
+      const proxy = { val: currentIndex.current };
+      activeTween.current = gsap.to(proxy, {
+        val: targetIndex,
+        duration,
+        ease: "power2.out",
+        onUpdate: () => {
+          currentIndex.current = proxy.val;
+          const snapped = Math.round(proxy.val);
+          setRenderIndex((prev) => (prev !== snapped ? snapped : prev));
+          updatePositions();
+        },
+        onComplete: () => {
+          currentIndex.current = targetIndex;
+          setRenderIndex(targetIndex);
+          activeTween.current = null;
+        },
+      });
+    },
+    [updatePositions],
+  );
+
+  // --- Pointer drag handlers ---
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      // Only primary button
+      if (e.button !== 0) return;
+      activeTween.current?.kill();
+      activeTween.current = null;
+
+      isDragging.current = true;
+      dragStartX.current = e.clientX;
+      dragStartIndex.current = currentIndex.current;
+      dragDistance.current = 0;
+      velocityTracker.current = [{ x: e.clientX, t: Date.now() }];
+
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isDragging.current) return;
+
+      const deltaX = e.clientX - dragStartX.current;
+      dragDistance.current = Math.abs(deltaX);
+
+      // Update currentIndex proportionally to drag distance
+      currentIndex.current = dragStartIndex.current - deltaX / CARD_STEP;
+
+      // Update renderIndex when crossing integer boundary
+      const snapped = Math.round(currentIndex.current);
+      setRenderIndex((prev) => (prev !== snapped ? snapped : prev));
+
+      updatePositions();
+
+      // Track velocity (keep last 5)
+      const tracker = velocityTracker.current;
+      tracker.push({ x: e.clientX, t: Date.now() });
+      if (tracker.length > 5) tracker.shift();
+    },
+    [updatePositions],
+  );
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isDragging.current) return;
+      isDragging.current = false;
+
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+
+      const tracker = velocityTracker.current;
+      if (tracker.length < 2) {
+        // No meaningful drag — snap to nearest
+        snapToIndex(Math.round(currentIndex.current), 0.4);
+        return;
+      }
+
+      const first = tracker[0];
+      const last = tracker[tracker.length - 1];
+      const dt = (last.t - first.t) / 1000; // seconds
+      const dx = last.x - first.x; // pixels
+
+      // Velocity in cards/second (negative dx = positive index movement)
+      const velocity = dt > 0 ? -dx / CARD_STEP / dt : 0;
+
+      const DAMPING = 0.4;
+      const targetIndex = Math.round(
+        currentIndex.current + velocity * DAMPING,
+      );
+      const duration = Math.min(
+        0.8,
+        Math.abs(velocity) * 0.15 + 0.3,
+      );
+
+      snapToIndex(targetIndex, duration);
+    },
+    [snapToIndex],
+  );
 
   /** Get the group for a given slot based on renderIndex */
   const getSlotGroup = useCallback(
@@ -231,8 +343,12 @@ export function ClusterPopup({
         aria-roledescription="carousel"
         aria-label={`${groups.length} group cards`}
         tabIndex={0}
-        className="relative overflow-hidden pb-12 pt-10 w-full h-[320px] cursor-grab active:cursor-grabbing"
+        className="relative overflow-hidden pb-12 pt-10 w-full h-[320px] cursor-grab active:cursor-grabbing touch-none"
         onClick={(e) => e.stopPropagation()}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
       >
         {Array.from({ length: TOTAL_SLOTS }, (_, slot) => {
           const group = getSlotGroup(slot);

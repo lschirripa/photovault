@@ -1,55 +1,51 @@
 # Ralph Progress Log
-Started: domingo, 9 de febrero de 2026
+Started: lunes,  9 de febrero de 2026, 20:02:42 -03
 ---
 
 ## Codebase Patterns
-- Package manager is `npm` (not bun/yarn)
-- Quality checks: `npm run type-check` (tsc --noEmit) and `npm run build` (next build)
-- Branch: `ralph/photo-globe` (continuing from previous work)
-- Clean architecture: domain <- application <- infrastructure/presentation
-- Path alias: `@/*` maps to `./src/*`
-- ALWAYS run `npm run build` to catch ESLint errors (not just `npm run type-check`)
-- React hooks must be declared before any early return in component body
-- Use `next/dynamic` with `{ ssr: false }` for Three.js/globe components
-- react-globe.gl: standalone component, NOT an R3F component, do NOT wrap in <Canvas>
-- react-globe.gl manages its own scene, camera, WebGLRenderer AND CSS2DRenderer
-- Access controls via ref: `globeEl.current.controls()` — returns OrbitControls instance
-- r3f-globe DOES NOT render HTML markers because R3F Canvas lacks CSS2DRenderer
-- Supabase join syntax: `table!inner(column)` for FK joins
-- RLS on media_assets handles group membership — no manual check needed
-- Use `useRef(false)` guard to prevent double-fetch in React StrictMode
+- GSAP carousel uses `currentIndex` ref (float) as single source of truth for position
+- `renderIndex` state (integer) triggers React re-renders for card content; `currentIndex` ref handles per-frame transforms
+- `wrapIndex(index, length)` = `((index % length) + length) % length` for infinite looping
+- Cards are absolutely positioned in overflow:hidden container; transforms computed from `centerX + (slotOffset - frac) * CARD_STEP`
+- Scale range: 1.05 (center) → 0.75 (edge); Opacity range: 1.0 (center) → 0.7 (edge)
+- GSAP context created on mount, `.revert()` on unmount for proper cleanup
+- Direct `card.style.transform` writes are faster than `gsap.set()` for per-frame updates
+- `snapToIndex(target, duration)` is the shared tween function — use it for drag release, click-to-center, and keyboard nav
+- `activeTween` ref tracks current snap tween; kill it before starting a new drag or snap
+- Velocity tracking: store last 5 `{x, t}` samples; compute velocity as `-dx / CARD_STEP / dt` (cards/second)
+- `dragDistance` ref tracks pixel displacement for click vs drag threshold (5px)
+- `touch-none` CSS class on container prevents browser touch scroll interference
 
 ---
 
 ## 2026-02-09 - US-001
-- Installed react-globe.gl@2.37.0 via npm install
-- Files changed: package.json, package-lock.json
-- r3f-globe, @react-three/fiber, @react-three/drei remain installed (not removed per AC)
-- Both type-check and build pass
+- Replaced native-scroll carousel with GSAP-driven transform-based positioning
+- Container now uses `overflow: hidden` instead of `overflow-x: scroll`
+- `currentIndex` ref (float) is the single source of truth for carousel position
+- 7 visible card slots (3 left + center + 3 right) with modular wrapping via `wrapIndex()`
+- Cards absolutely positioned via `translateX()` with scale+opacity effects based on distance from center
+- GSAP context for tween lifecycle management
+- GroupCard component and ClusterPopupProps interface unchanged
+- Files changed: `src/presentation/components/globe/cluster-popup.tsx`
 - **Learnings for future iterations:**
-  - react-globe.gl@2.37.0 is the current version, it wraps three-globe core
-  - It coexists with r3f-globe and R3F packages without conflicts
+  - Splitting position logic (ref-based, per-frame) from content logic (state-based, on-snap) avoids fighting React's render cycle
+  - Direct style writes (`el.style.transform = ...`) outperform `gsap.set()` for high-frequency updates
+  - The `gsap` import is needed even in US-001 for context setup; actual `gsap.to()` tweening will be used starting US-002
 ---
 
-## 2026-02-09 - US-002, US-003, US-004
-- Complete rewrite of photo-globe.tsx from r3f-globe (R3F Canvas) to react-globe.gl (standalone)
-- Files changed: src/presentation/components/globe/photo-globe.tsx
-- Removed: Canvas, OrbitControls, R3fGlobe, ambientLight, directionalLight imports
-- Added: Globe (default) + GlobeMethods (type) from react-globe.gl
-- Globe ref typed as `useRef<GlobeMethods | undefined>(undefined)` per library's FCwithRef type
-- Container sizing via window.innerWidth / (innerHeight - 56px nav) with ResizeObserver
-- Controls configured via `globeEl.current.controls()` in useEffect dependent on globeReady
-- Auto-rotation pause/resume: controls event listeners 'start'/'end' with 3s idle timeout
-- Initial POV: `pointOfView({ altitude: 2.5 })`
-- HTML markers: htmlElementsData, htmlLat/htmlLng/htmlAltitude(0.01)/htmlElement/htmlTransitionDuration(500)
-- Labels: labelsData, labelLat/labelLng/labelText/labelColor/labelSize(0.4)/labelAltitude(0.015)/labelDotRadius(0)
-- create-marker-element.ts unchanged — works as-is with react-globe.gl's htmlElement accessor
-- Both type-check and build pass
+## 2026-02-09 - US-002
+- Added momentum-based drag interaction using pointer events
+- Pointer down/move/up handlers drive `currentIndex` during drag, with per-frame position updates
+- Velocity computed from last 5 pointer samples; momentum snap with damping factor 0.4
+- `snapToIndex()` function created as reusable tween helper — animates to target integer with power2.out ease
+- `activeTween` ref ensures only one snap tween runs at a time (killed on new drag)
+- `dragDistance` ref tracks pixel displacement for future click-vs-drag differentiation (US-003)
+- Added `touch-none` class to prevent browser default touch gestures
+- Files changed: `src/presentation/components/globe/cluster-popup.tsx`
 - **Learnings for future iterations:**
-  - react-globe.gl ref type is `GlobeMethods | undefined` (not `any`) — library exports `GlobeMethods`
-  - react-globe.gl takes `width` and `height` as number props (not CSS)
-  - `onGlobeReady` fires when globe is mounted — use it to trigger controls setup via a state flag
-  - react-globe.gl supports `htmlElementVisibilityModifier` (unlike r3f-globe) but not needed here
-  - `labelIncludeDot` IS supported by react-globe.gl but `labelDotRadius={0}` achieves same effect
-  - No need for `flat` prop — react-globe.gl handles color space correctly out of the box
+  - Convert pointer deltaX to index delta via `deltaX / CARD_STEP` for 1:1 feel
+  - Using a proxy object `{ val }` with `gsap.to()` is the cleanest pattern for animating a ref value
+  - `setPointerCapture` ensures move/up events fire even if pointer leaves the element
+  - `onPointerCancel` should mirror `onPointerUp` to handle interrupted gestures
+  - `snapToIndex` updates `renderIndex` both during tween (via `onUpdate`) and on complete — the onComplete sets the exact integer to avoid float drift
 ---
