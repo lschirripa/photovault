@@ -1,13 +1,17 @@
 "use client";
 
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import R3fGlobe from "r3f-globe";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { useGeoMedia } from "@/presentation/hooks/use-geo-media";
 import { useUrlCache } from "@/presentation/hooks/use-url-cache";
-import { createMarkerElement, type MarkerData } from "./create-marker-element";
+import {
+  createMarkerElement,
+  type ClusterMarkerData,
+} from "./create-marker-element";
+import { clusterPoints } from "./geo-utils";
 
 const GLOBE_IMAGE_URL =
   "//cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg";
@@ -19,26 +23,30 @@ export default function PhotoGlobe() {
   const idleTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const { points, loading } = useGeoMedia();
   const { fetchUrls } = useUrlCache();
-  const [markerData, setMarkerData] = useState<MarkerData[]>([]);
+  const [clusterData, setClusterData] = useState<ClusterMarkerData[]>([]);
 
-  // Fetch thumbnail URLs for all geo points
+  const clusters = useMemo(
+    () => (points.length > 0 ? clusterPoints(points, 50) : []),
+    [points]
+  );
+
+  // Fetch thumbnail URLs for all geo points, then build cluster marker data
   useEffect(() => {
-    if (points.length === 0) return;
+    if (points.length === 0 || clusters.length === 0) return;
 
     const assetIds = points.map((p) => p.id);
     fetchUrls(assetIds, "thumbnail").then((urls) => {
-      const data: MarkerData[] = points
-        .filter((p) => urls[p.id])
-        .map((p) => ({
-          lat: p.lat,
-          lng: p.lng,
-          thumbnailUrl: urls[p.id]!,
-          groupId: p.groupId,
-          assetId: p.id,
-        }));
-      setMarkerData(data);
+      const data: ClusterMarkerData[] = clusters.map((cluster) => ({
+        lat: cluster.center.lat,
+        lng: cluster.center.lng,
+        points: cluster.points,
+        thumbnailUrls: cluster.points
+          .map((p) => urls[p.id] ?? "")
+          .filter(Boolean),
+      }));
+      setClusterData(data);
     });
-  }, [points, fetchUrls]);
+  }, [points, clusters, fetchUrls]);
 
   const handleInteractionStart = useCallback(() => {
     if (controlsRef.current) {
@@ -96,12 +104,12 @@ export default function PhotoGlobe() {
           showAtmosphere
           atmosphereColor="lightskyblue"
           atmosphereAltitude={0.2}
-          htmlElementsData={markerData}
+          htmlElementsData={clusterData}
           htmlLat="lat"
           htmlLng="lng"
           htmlAltitude={0.01}
           htmlElement={(d: object) =>
-            createMarkerElement(d as MarkerData)
+            createMarkerElement(d as ClusterMarkerData)
           }
           htmlTransitionDuration={500}
         />
