@@ -127,10 +127,18 @@ export function ClusterPopup({
   const velocityTracker = useRef<{ x: number; t: number }[]>([]);
 
   // renderIndex drives which group data each slot shows (React state for re-renders).
-  // It's only updated when currentIndex snaps to an integer (not per-frame).
+  // renderIndexRef keeps the latest value available synchronously for updatePositions
+  // so it doesn't rely on stale closure values from pending setState.
+  const renderIndexRef = useRef(0);
   const [renderIndex, setRenderIndex] = useState(0);
 
   const groupCount = groups.length;
+
+  /** Update renderIndex both ref (immediate) and state (triggers re-render) */
+  const setRenderIndexSync = useCallback((value: number) => {
+    renderIndexRef.current = value;
+    setRenderIndex(value);
+  }, []);
 
   /** Update card transforms, scale, opacity per-frame. No React re-renders. */
   const updatePositions = useCallback(() => {
@@ -138,9 +146,11 @@ export function ClusterPopup({
     if (!container || groupCount === 0) return;
 
     const containerWidth = container.offsetWidth;
+    if (containerWidth === 0) return; // Container not laid out yet
+
     const centerX = containerWidth / 2 - CARD_WIDTH / 2;
     const ci = currentIndex.current;
-    const ri = renderIndex;
+    const ri = renderIndexRef.current; // Read from ref for always-fresh value
     const frac = ci - ri;
 
     for (let slot = 0; slot < TOTAL_SLOTS; slot++) {
@@ -160,7 +170,7 @@ export function ClusterPopup({
       card.style.opacity = String(opacity);
       card.style.zIndex = String(zIndex);
     }
-  }, [groupCount, renderIndex]);
+  }, [groupCount]);
 
   /** Animate currentIndex to a target integer, updating positions per-frame */
   const snapToIndex = useCallback(
@@ -174,12 +184,12 @@ export function ClusterPopup({
         onUpdate: () => {
           currentIndex.current = proxy.val;
           const snapped = Math.round(proxy.val);
-          setRenderIndex((prev) => (prev !== snapped ? snapped : prev));
+          setRenderIndexSync(snapped);
           updatePositions();
         },
         onComplete: () => {
           currentIndex.current = targetIndex;
-          setRenderIndex(targetIndex);
+          setRenderIndexSync(targetIndex);
           activeTween.current = null;
         },
       });
@@ -218,7 +228,7 @@ export function ClusterPopup({
 
       // Update renderIndex when crossing integer boundary
       const snapped = Math.round(currentIndex.current);
-      setRenderIndex((prev) => (prev !== snapped ? snapped : prev));
+      setRenderIndexSync(snapped);
 
       updatePositions();
 
@@ -304,7 +314,7 @@ export function ClusterPopup({
 
     const startIndex = Math.floor(groupCount / 2);
     currentIndex.current = startIndex;
-    setRenderIndex(startIndex);
+    setRenderIndexSync(startIndex);
 
     // Entry animation: container fades in + scales up
     const wrapper = wrapperRef.current;
@@ -339,10 +349,8 @@ export function ClusterPopup({
 
   // Update positions whenever renderIndex changes (initial mount + snaps)
   useEffect(() => {
-    requestAnimationFrame(() => {
-      updatePositions();
-    });
-  }, [updatePositions]);
+    updatePositions();
+  }, [updatePositions, renderIndex]);
 
   /** Exit animation then call onClose */
   const handleClose = useCallback(() => {
