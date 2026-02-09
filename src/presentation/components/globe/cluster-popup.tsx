@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
 import Image from "next/image";
 
@@ -32,7 +32,7 @@ function GroupCard({
     <div
       role="button"
       tabIndex={0}
-      className="group-card flex-shrink-0 w-[300px] bg-[#0a0a0a]/95 border border-white/10 rounded-2xl shadow-2xl p-6 text-white overflow-hidden snap-center mx-2 transition-transform duration-75 select-none cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+      className="group-card flex-shrink-0 w-[300px] bg-[#0a0a0a]/95 border border-white/10 rounded-2xl shadow-2xl p-6 text-white overflow-hidden select-none cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -94,6 +94,17 @@ function GroupCard({
   );
 }
 
+const CARD_WIDTH = 300;
+const CARD_GAP = 16;
+const CARD_STEP = CARD_WIDTH + CARD_GAP;
+const HALF_SLOTS = 3;
+const TOTAL_SLOTS = HALF_SLOTS * 2 + 1; // 7
+
+/** Modular wrap: always returns a value within [0, length) */
+function wrapIndex(index: number, length: number): number {
+  return ((index % length) + length) % length;
+}
+
 export function ClusterPopup({
   groups,
   onNavigate,
@@ -101,19 +112,83 @@ export function ClusterPopup({
 }: ClusterPopupProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const isDragging = useRef(false);
-  const startX = useRef(0);
-  const scrollLeft = useRef(0);
-  const dragDistance = useRef(0);
-  const rafRef = useRef<number>(0);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const currentIndex = useRef(0);
+  const gsapCtx = useRef<gsap.Context | null>(null);
 
-  // Extend groups for infinite feel (5x for smooth looping)
-  const EXTEND_FACTOR = 5;
-  const extendedGroups = useMemo(() => {
-    return Array.from({ length: EXTEND_FACTOR }, () => groups).flat();
-  }, [groups]);
+  // renderIndex drives which group data each slot shows (React state for re-renders).
+  // It's only updated when currentIndex snaps to an integer (not per-frame).
+  const [renderIndex, setRenderIndex] = useState(0);
 
-  // Escape key to close
+  const groupCount = groups.length;
+
+  /** Update card transforms, scale, opacity per-frame. No React re-renders. */
+  const updatePositions = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || groupCount === 0) return;
+
+    const containerWidth = container.offsetWidth;
+    const centerX = containerWidth / 2 - CARD_WIDTH / 2;
+    const ci = currentIndex.current;
+    const ri = renderIndex;
+    const frac = ci - ri;
+
+    for (let slot = 0; slot < TOTAL_SLOTS; slot++) {
+      const card = cardRefs.current[slot];
+      if (!card) continue;
+
+      const slotOffset = slot - HALF_SLOTS;
+      const x = centerX + (slotOffset - frac) * CARD_STEP;
+      const distFromCenter = Math.abs(slotOffset - frac);
+      const progress = Math.min(distFromCenter / HALF_SLOTS, 1);
+
+      const scale = 1.05 - progress * 0.3;
+      const opacity = 1 - progress * 0.3;
+      const zIndex = TOTAL_SLOTS - Math.round(distFromCenter);
+
+      card.style.transform = `translateX(${x}px) scale(${scale})`;
+      card.style.opacity = String(opacity);
+      card.style.zIndex = String(zIndex);
+    }
+  }, [groupCount, renderIndex]);
+
+  /** Get the group for a given slot based on renderIndex */
+  const getSlotGroup = useCallback(
+    (slot: number): GroupData => {
+      const logicalIndex = renderIndex + (slot - HALF_SLOTS);
+      return groups[wrapIndex(logicalIndex, groupCount)];
+    },
+    [renderIndex, groups, groupCount],
+  );
+
+  // Setup GSAP context and initial positioning
+  useEffect(() => {
+    if (groupCount === 0) return;
+
+    gsapCtx.current = gsap.context(() => {}, containerRef);
+
+    const startIndex = Math.floor(groupCount / 2);
+    currentIndex.current = startIndex;
+    setRenderIndex(startIndex);
+
+    return () => {
+      gsapCtx.current?.revert();
+    };
+  }, [groupCount]);
+
+  // Update positions whenever renderIndex changes (initial mount + snaps)
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      updatePositions();
+    });
+  }, [updatePositions]);
+
+  // Focus close button on mount
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  // Escape to close
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -122,251 +197,10 @@ export function ClusterPopup({
     return () => document.removeEventListener("keydown", handleEscape);
   }, [onClose]);
 
-  // Focus close button on mount
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
-
-  // Cleanup rAF on unmount
-  useEffect(() => {
-    return () => cancelAnimationFrame(rafRef.current);
-  }, []);
-
-  const updateCardScaling = () => {
-    if (!containerRef.current) return;
-    const container = containerRef.current;
-    const cards = container.querySelectorAll(".group-card");
-    const containerWidth = container.offsetWidth;
-    const containerCenter = containerWidth / 2;
-    const currentScroll = container.scrollLeft;
-
-    cards.forEach((card) => {
-      const htmlCard = card as HTMLElement;
-      // Use offsetLeft math instead of getBoundingClientRect to avoid reflows
-      const cardCenter =
-        htmlCard.offsetLeft + htmlCard.offsetWidth / 2 - currentScroll;
-      const distanceFromCenter = Math.abs(containerCenter - cardCenter);
-
-      const maxDistance = containerWidth / 2;
-      const progress = Math.min(distanceFromCenter / maxDistance, 1);
-
-      // Scale from 1.05 at center to 0.75 at edges
-      const scale = 1.05 - progress * 0.3;
-      const opacity = 1 - progress * 0.3;
-
-      // Direct style writes instead of gsap.set for performance
-      htmlCard.style.transform = `scale(${scale})`;
-      htmlCard.style.opacity = String(opacity);
-    });
-  };
-
-  const checkLoop = () => {
-    if (!containerRef.current || groups.length === 0) return;
-    const container = containerRef.current;
-    const cards = container.querySelectorAll(".group-card");
-    if (cards.length < groups.length * 2) return;
-
-    const setSize = groups.length;
-    const firstInSet = cards[0] as HTMLElement;
-    const firstInNextSet = cards[setSize] as HTMLElement;
-
-    if (firstInSet && firstInNextSet) {
-      const setWidth = firstInNextSet.offsetLeft - firstInSet.offsetLeft;
-      const scrollWidth = container.scrollWidth;
-
-      const jumpAmount = setWidth * 2;
-      const leftLimit = setWidth;
-      const rightLimit = scrollWidth - setWidth - container.offsetWidth;
-
-      if (container.scrollLeft < leftLimit) {
-        container.scrollLeft += jumpAmount;
-      } else if (container.scrollLeft > rightLimit) {
-        container.scrollLeft -= jumpAmount;
-      }
-    }
-  };
-
-  const handleScroll = () => {
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      updateCardScaling();
-      checkLoop();
-    });
-  };
-
-  const snapToNearestCard = () => {
-    if (!containerRef.current) return;
-    const container = containerRef.current;
-    const cards = container.querySelectorAll(".group-card");
-    const containerWidth = container.offsetWidth;
-    const containerCenter = containerWidth / 2;
-    const currentScroll = container.scrollLeft;
-
-    let nearestCard: HTMLElement | null = null;
-    let nearestDistance = Infinity;
-
-    cards.forEach((card) => {
-      const htmlCard = card as HTMLElement;
-      const cardCenter =
-        htmlCard.offsetLeft + htmlCard.offsetWidth / 2 - currentScroll;
-      const distance = Math.abs(containerCenter - cardCenter);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestCard = htmlCard;
-      }
-    });
-
-    if (nearestCard) {
-      const el = nearestCard as HTMLElement;
-      const targetScroll =
-        el.offsetLeft + el.offsetWidth / 2 - containerCenter;
-
-      gsap.to(container, {
-        scrollLeft: targetScroll,
-        duration: 0.4,
-        ease: "power2.out",
-        onUpdate: () => {
-          updateCardScaling();
-          checkLoop();
-        },
-      });
-    }
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!containerRef.current) return;
-    isDragging.current = true;
-    dragDistance.current = 0;
-    startX.current = e.pageX - containerRef.current.offsetLeft;
-    scrollLeft.current = containerRef.current.scrollLeft;
-    containerRef.current.style.scrollBehavior = "auto";
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging.current || !containerRef.current) return;
-    e.preventDefault();
-    const x = e.pageX - containerRef.current.offsetLeft;
-    const walk = (x - startX.current) * 1.5;
-    dragDistance.current = Math.abs(walk);
-    containerRef.current.scrollLeft = scrollLeft.current - walk;
-  };
-
-  const handleMouseUp = () => {
-    if (!isDragging.current) return;
-    isDragging.current = false;
-    snapToNearestCard();
-  };
-
-  const handleCardClick = (index: number) => {
-    if (!containerRef.current) return;
-    if (dragDistance.current > 10) return;
-
-    const container = containerRef.current;
-    const cards = container.querySelectorAll(".group-card");
-    const targetCard = cards[index] as HTMLElement;
-
-    if (targetCard) {
-      const containerWidth = container.offsetWidth;
-      const targetScroll =
-        targetCard.offsetLeft + targetCard.offsetWidth / 2 - containerWidth / 2;
-
-      gsap.to(container, {
-        scrollLeft: targetScroll,
-        duration: 0.5,
-        ease: "power2.out",
-        onUpdate: () => {
-          updateCardScaling();
-          checkLoop();
-        },
-      });
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const container = containerRef.current;
-    if (!container) return;
-
-    const cards = container.querySelectorAll(".group-card");
-    const containerWidth = container.offsetWidth;
-    const containerCenter = containerWidth / 2;
-    const currentScroll = container.scrollLeft;
-
-    let nearestIndex = 0;
-    let nearestDistance = Infinity;
-    cards.forEach((card, i) => {
-      const htmlCard = card as HTMLElement;
-      const cardCenter =
-        htmlCard.offsetLeft + htmlCard.offsetWidth / 2 - currentScroll;
-      const dist = Math.abs(containerCenter - cardCenter);
-      if (dist < nearestDistance) {
-        nearestDistance = dist;
-        nearestIndex = i;
-      }
-    });
-
-    const nextIndex =
-      e.key === "ArrowLeft"
-        ? Math.max(0, nearestIndex - 1)
-        : Math.min(cards.length - 1, nearestIndex + 1);
-
-    const targetCard = cards[nextIndex] as HTMLElement;
-    if (targetCard) {
-      const targetScroll =
-        targetCard.offsetLeft + targetCard.offsetWidth / 2 - containerCenter;
-
-      gsap.to(container, {
-        scrollLeft: targetScroll,
-        duration: 0.4,
-        ease: "power2.out",
-        onUpdate: () => {
-          updateCardScaling();
-          checkLoop();
-        },
-      });
-    }
-  };
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    // Animate container in with GSAP context for proper cleanup
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        containerRef.current,
-        { opacity: 0, scale: 0.9, y: 10 },
-        { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: "back.out(1.7)" },
-      );
-    }, containerRef);
-
-    const container = containerRef.current;
-
-    // Small delay to ensure layout is calculated
-    const timeoutId = setTimeout(() => {
-      const cards = container.querySelectorAll(".group-card");
-      const middleIndex = Math.floor(extendedGroups.length / 2);
-      const targetCard = cards[middleIndex] as HTMLElement;
-
-      if (targetCard) {
-        const containerWidth = container.offsetWidth;
-        container.scrollLeft =
-          targetCard.offsetLeft +
-          targetCard.offsetWidth / 2 -
-          containerWidth / 2;
-
-        updateCardScaling();
-      }
-    }, 50);
-
-    return () => {
-      ctx.revert();
-      clearTimeout(timeoutId);
-    };
-  }, [extendedGroups]);
+  if (groupCount === 0) return null;
 
   return (
-    <div className="relative flex items-center justify-center w-full max-w-7xl mx-auto px-4">
+    <div className="relative flex items-center justify-center w-full max-w-7xl mx-auto px-4 z-10!">
       {/* Close Button */}
       <button
         ref={closeButtonRef}
@@ -390,34 +224,37 @@ export function ClusterPopup({
         </svg>
       </button>
 
-      {/* Fade Masks */}
-      <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-[#000]/80 to-transparent z-10 pointer-events-none" />
-      <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#000]/80 to-transparent z-10 pointer-events-none" />
-
-      {/* Carousel Container */}
+      {/* Carousel Container — overflow:hidden, no native scroll */}
       <div
         ref={containerRef}
         role="region"
         aria-roledescription="carousel"
         aria-label={`${groups.length} group cards`}
         tabIndex={0}
-        onKeyDown={handleKeyDown}
-        onScroll={handleScroll}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className="flex overflow-x-hidden pb-12 pt-10 px-[30%] hide-scrollbar w-full cursor-grab active:cursor-grabbing items-center"
+        className="relative overflow-hidden pb-12 pt-10 w-full h-[320px] cursor-grab active:cursor-grabbing"
         onClick={(e) => e.stopPropagation()}
       >
-        {extendedGroups.map((group, idx) => (
-          <GroupCard
-            key={`${group.groupId}-${idx}`}
-            group={group}
-            onNavigate={onNavigate}
-            onClick={() => handleCardClick(idx)}
-          />
-        ))}
+        {Array.from({ length: TOTAL_SLOTS }, (_, slot) => {
+          const group = getSlotGroup(slot);
+          return (
+            <div
+              key={`slot-${slot}`}
+              ref={(el) => {
+                cardRefs.current[slot] = el;
+              }}
+              className="absolute top-10"
+              style={{ width: CARD_WIDTH }}
+            >
+              <GroupCard
+                group={group}
+                onNavigate={onNavigate}
+                onClick={() => {
+                  // Click-to-center and navigate handled in US-003
+                }}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
