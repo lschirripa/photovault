@@ -1,161 +1,55 @@
 # Ralph Progress Log
-Started: lunes,  9 de febrero de 2026, 03:56:00 -03
+Started: domingo, 9 de febrero de 2026
 ---
 
 ## Codebase Patterns
 - Package manager is `npm` (not bun/yarn)
 - Quality checks: `npm run type-check` (tsc --noEmit) and `npm run build` (next build)
-- Branch was created from `develop` (main branch)
+- Branch: `ralph/photo-globe` (continuing from previous work)
 - Clean architecture: domain <- application <- infrastructure/presentation
 - Path alias: `@/*` maps to `./src/*`
-- API routes: use `createServerComponentClient()` (async), auth via `supabase.auth.getUser()`, wrap in try/catch
-- Supabase join syntax: `table!inner(column)` for FK joins; cast result with `as unknown as { data: ...; error: ... }`
-- RLS on media_assets enforces group membership — no manual group_members check needed
-- Supabase IS NOT NULL filter: `.not("column", "is", null)`
 - ALWAYS run `npm run build` to catch ESLint errors (not just `npm run type-check`)
 - React hooks must be declared before any early return in component body
-- r3f-globe: default import `R3fGlobe from 'r3f-globe'`, no auto-rotation (use OrbitControls), no htmlElementVisibilityModifier
-- Use `next/dynamic` with `{ ssr: false }` for Three.js/R3F components
+- Use `next/dynamic` with `{ ssr: false }` for Three.js/globe components
+- react-globe.gl: standalone component, NOT an R3F component, do NOT wrap in <Canvas>
+- react-globe.gl manages its own scene, camera, WebGLRenderer AND CSS2DRenderer
+- Access controls via ref: `globeEl.current.controls()` — returns OrbitControls instance
+- r3f-globe DOES NOT render HTML markers because R3F Canvas lacks CSS2DRenderer
+- Supabase join syntax: `table!inner(column)` for FK joins
+- RLS on media_assets handles group membership — no manual check needed
+- Use `useRef(false)` guard to prevent double-fetch in React StrictMode
 
 ---
 
 ## 2026-02-09 - US-001
-- Installed three@0.182.0, @react-three/fiber@9.5.0, @react-three/drei@10.7.7, r3f-globe@1.6.0
+- Installed react-globe.gl@2.37.0 via npm install
 - Files changed: package.json, package-lock.json
+- r3f-globe, @react-three/fiber, @react-three/drei remain installed (not removed per AC)
+- Both type-check and build pass
 - **Learnings for future iterations:**
-  - @types/three is pulled in transitively via @react-three/drei (no need to install separately)
-  - All packages installed cleanly with React 19 — no peer dep conflicts
-  - Build passes with no SSR issues from the new packages (they're tree-shaken since nothing imports them yet)
+  - react-globe.gl@2.37.0 is the current version, it wraps three-globe core
+  - It coexists with r3f-globe and R3F packages without conflicts
 ---
 
-## 2026-02-09 - US-002
-- Created GET /api/media/geo endpoint at src/app/api/media/geo/route.ts
-- Queries media_assets with latitude/longitude IS NOT NULL, joins groups for group name
-- RLS automatically filters to groups the authenticated user is a member of
-- Response maps snake_case DB columns to camelCase (latitude→lat, longitude→lng, group_id→groupId, etc.)
-- Files changed: src/app/api/media/geo/route.ts
-- **Learnings for future iterations:**
-  - Supabase join syntax: `groups!inner(name)` for inner join on FK relation
-  - RLS handles group membership filtering — no manual join with group_members needed
-  - Cast Supabase query result with `as unknown as { data: ... | null; error: Error | null }` for custom select shapes
-  - Use `.not("column", "is", null)` for IS NOT NULL filters in Supabase JS
----
-
-## 2026-02-09 - US-003
-- Created useGeoMedia hook at src/presentation/hooks/use-geo-media.ts
-- Exports GeoPoint type and useGeoMedia() hook returning { points, loading, error, refresh }
-- Uses useRef to prevent double-fetching on re-render (React StrictMode safe)
-- Files changed: src/presentation/hooks/use-geo-media.ts
-- **Learnings for future iterations:**
-  - Hooks follow `"use client"` directive at top, `use-<name>.ts` naming convention
-  - Use `useRef(false)` guard pattern to prevent double-fetch in StrictMode
-  - Existing hooks use useState/useCallback/useEffect pattern (no external state lib)
----
-
-## 2026-02-09 - US-004
-- Created /map page at src/app/(dashboard)/map/page.tsx with dynamic import of PhotoGlobe (ssr: false)
-- Created placeholder PhotoGlobe component at src/presentation/components/globe/photo-globe.tsx
-- Added "Map" link to dashboard nav bar in src/app/(dashboard)/layout.tsx
-- Globe container uses h-[calc(100dvh-56px)] (nav is h-14 = 56px)
-- Files changed: src/app/(dashboard)/map/page.tsx, src/presentation/components/globe/photo-globe.tsx, src/app/(dashboard)/layout.tsx
-- **Learnings for future iterations:**
-  - Dashboard route group is at src/app/(dashboard)/ — existing pages: groups, settings, upload
-  - Nav bar height is h-14 (56px) — use calc(100dvh-56px) for full-height content below it
-  - Dashboard layout is "use client" with AuthProvider for user state
-  - Use `next/dynamic` with `{ ssr: false }` for Three.js components to avoid SSR issues
----
-
-## 2026-02-09 - US-005
-- Created geo-utils at src/presentation/components/globe/geo-utils.ts
-- Exports haversineDistance() and clusterPoints() with Cluster type
-- Clustering uses simple greedy approach: iterate points, add to first cluster within threshold, else create new
-- Cluster center recalculated as average of all member lat/lng on each addition
-- Files changed: src/presentation/components/globe/geo-utils.ts
-- **Learnings for future iterations:**
-  - GeoPoint type is exported from use-geo-media.ts hook — import it for geo-utils
-  - Default clustering threshold is 50km — can be adjusted via parameter
----
-
-## 2026-02-09 - US-006
-- Updated photo-globe.tsx with R3F Canvas, OrbitControls, and R3fGlobe component
-- Earth night texture with bump map from CDN, atmosphere glow enabled
-- OrbitControls: auto-rotate at 0.5 speed, pan disabled, zoom constrained (120-800)
-- Auto-rotate pauses on interaction, resumes after 3s idle
+## 2026-02-09 - US-002, US-003, US-004
+- Complete rewrite of photo-globe.tsx from r3f-globe (R3F Canvas) to react-globe.gl (standalone)
 - Files changed: src/presentation/components/globe/photo-globe.tsx
+- Removed: Canvas, OrbitControls, R3fGlobe, ambientLight, directionalLight imports
+- Added: Globe (default) + GlobeMethods (type) from react-globe.gl
+- Globe ref typed as `useRef<GlobeMethods | undefined>(undefined)` per library's FCwithRef type
+- Container sizing via window.innerWidth / (innerHeight - 56px nav) with ResizeObserver
+- Controls configured via `globeEl.current.controls()` in useEffect dependent on globeReady
+- Auto-rotation pause/resume: controls event listeners 'start'/'end' with 3s idle timeout
+- Initial POV: `pointOfView({ altitude: 2.5 })`
+- HTML markers: htmlElementsData, htmlLat/htmlLng/htmlAltitude(0.01)/htmlElement/htmlTransitionDuration(500)
+- Labels: labelsData, labelLat/labelLng/labelText/labelColor/labelSize(0.4)/labelAltitude(0.015)/labelDotRadius(0)
+- create-marker-element.ts unchanged — works as-is with react-globe.gl's htmlElement accessor
+- Both type-check and build pass
 - **Learnings for future iterations:**
-  - r3f-globe default import: `import R3fGlobe from 'r3f-globe'`
-  - r3f-globe does NOT have auto-rotation — use OrbitControls from drei
-  - `htmlElementVisibilityModifier` does NOT exist in r3f-globe v1.6 (it's a react-globe.gl thing)
-  - Camera position [0, 0, 350] shows full globe; minDistance 120 prevents clipping
-  - Need `flat` prop on Canvas for proper color rendering
-  - Import `OrbitControls as OrbitControlsImpl` from 'three-stdlib' for ref typing
-  - OrbitControls onStart/onEnd callbacks for interaction detection
----
-
-## 2026-02-09 - US-007
-- Created create-marker-element.ts with MarkerData interface and createMarkerElement()
-- Updated photo-globe.tsx to fetch geo points via useGeoMedia, resolve thumbnail URLs via useUrlCache
-- Markers are 40px circular divs with white border, cursor pointer, click navigates to group
-- Uses htmlElementsData/htmlElement/htmlLat/htmlLng/htmlAltitude/htmlTransitionDuration props
-- Empty state shows message when no geo-tagged photos exist
-- Files changed: src/presentation/components/globe/create-marker-element.ts, src/presentation/components/globe/photo-globe.tsx
-- **Learnings for future iterations:**
-  - useUrlCache.fetchUrls takes asset IDs (not thumbnail keys) — it calls POST /api/media/urls internally
-  - htmlElement accessor receives data objects from htmlElementsData — cast to MarkerData
-  - Markers are DOM elements outside React — use e.stopPropagation() to prevent OrbitControls interference
-  - pointer-events: auto on marker elements to make them clickable over the canvas
----
-
-## 2026-02-09 - US-008
-- Updated create-marker-element.ts: renamed MarkerData to ClusterMarkerData with points[] and thumbnailUrls[]
-- Clusters of 1: single circular thumbnail; 2+: overlapping offset thumbnails (max 3 visible, 8px offset)
-- Count badge ('+N') for clusters with >3 photos, positioned top-right, blue pill
-- photo-globe.tsx now uses clusterPoints() to group nearby points before passing to htmlElementsData
-- Click on single-group clusters navigates directly; mixed-group clusters deferred to fan-out (US-009)
-- Files changed: src/presentation/components/globe/create-marker-element.ts, src/presentation/components/globe/photo-globe.tsx
-- **Learnings for future iterations:**
-  - ClusterMarkerData shape: { lat, lng, points: GeoPoint[], thumbnailUrls: string[] }
-  - Use useMemo for cluster computation to avoid recalculating on every render
-  - r3f-globe htmlElementsData items must have lat/lng properties matching the accessors
----
-
-## 2026-02-09 - US-009 & US-010
-- Rewrote create-marker-element.ts with fan-out animation and click navigation
-- Hover on cluster: thumbnails fan out in a circle (radius 50px, up to 8 visible)
-- Animation uses CSS transitions on left/top/opacity (200ms ease-out)
-- Click on fanned thumbnail: navigate to that point's group
-- Click on stacked cluster: if single group, navigate; if mixed groups, fan out first
-- '+N more' indicator shown when cluster exceeds MAX_FAN_OUT (8)
-- Wrapper uses pointer-events:none, inner container uses pointer-events:auto for precise hit area
-- Files changed: src/presentation/components/globe/create-marker-element.ts
-- **Learnings for future iterations:**
-  - Animating left/top with CSS transitions works for this use case (no reflow concerns at this scale)
-  - Use data attributes (dataset.fanX, dataset.stackLeft, etc.) to store positions for toggle
-  - isFanned boolean flag to differentiate click behavior in stacked vs fanned state
-  - Wrapper needs to be large enough for fan-out circle (2 * (FAN_RADIUS + THUMB_SIZE))
----
-
-## 2026-02-09 - US-011
-- Added location labels using r3f-globe Labels Layer
-- Labels built from cluster data: prefers locationCity, falls back to locationCountry
-- Deduplication: skips labels with same text within 100km of existing label
-- Label styling: semi-transparent white, size 0.4, altitude 0.015, no dot marker
-- Files changed: src/presentation/components/globe/photo-globe.tsx
-- **Learnings for future iterations:**
-  - r3f-globe labelIncludeDot={false} hides the dot; labelDotRadius={0} alone doesn't fully hide it
-  - Labels are 3D text rendered on globe surface (SDF text), not HTML elements
-  - haversineDistance is reused from geo-utils for label deduplication
----
-
-## 2026-02-09 - US-012
-- Added fade-in animation: globe container starts at opacity 0, fades to 1 over 500ms on onGlobeReady callback
-- Auto-rotate pause/resume was already implemented in US-006
-- Empty state ("No photos with location data yet") was already implemented in US-007
-- Marker entrance animation via htmlTransitionDuration was already set in US-007
-- Files changed: src/presentation/components/globe/photo-globe.tsx
-- **Learnings for future iterations:**
-  - CRITICAL: All useCallback/useMemo/useState hooks must be declared before any early return in the component
-  - ESLint react-hooks/rules-of-hooks catches conditional hook calls during `next build` (not during `tsc --noEmit`)
-  - onGlobeReady callback fires when the globe texture is loaded and the globe is visible
-  - Always run `npm run build` (not just type-check) to catch ESLint errors
+  - react-globe.gl ref type is `GlobeMethods | undefined` (not `any`) — library exports `GlobeMethods`
+  - react-globe.gl takes `width` and `height` as number props (not CSS)
+  - `onGlobeReady` fires when globe is mounted — use it to trigger controls setup via a state flag
+  - react-globe.gl supports `htmlElementVisibilityModifier` (unlike r3f-globe) but not needed here
+  - `labelIncludeDot` IS supported by react-globe.gl but `labelDotRadius={0}` achieves same effect
+  - No need for `flat` prop — react-globe.gl handles color space correctly out of the box
 ---

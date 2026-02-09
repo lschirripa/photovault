@@ -1,230 +1,94 @@
 {
   "project": "PhotoVault",
   "branchName": "ralph/photo-globe",
-  "description": "Interactive 3D Earth globe at /map that visualizes photo locations using GPS metadata with thumbnail markers, clustering, and group navigation",
+  "description": "Fix globe marker rendering by switching from r3f-globe to react-globe.gl which manages CSS2DRenderer automatically",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Install Three.js ecosystem dependencies",
-      "description": "As a developer, I need three, @react-three/fiber, @react-three/drei, and r3f-globe installed so we can build the globe component.",
+      "title": "Install react-globe.gl",
+      "description": "As a developer, I need react-globe.gl installed so the globe component can use its built-in CSS2DRenderer for HTML marker rendering.",
       "acceptanceCriteria": [
-        "Run: npm install three @react-three/fiber @react-three/drei r3f-globe",
-        "@react-three/fiber is v9+ (React 19 compatible)",
-        "@react-three/drei is v10+",
-        "r3f-globe is v1.6+",
-        "npm run type-check passes with new dependencies",
-        "npm run build succeeds (no SSR issues)"
+        "Run: npm install react-globe.gl",
+        "react-globe.gl is installed successfully",
+        "npm run type-check passes",
+        "npm run build succeeds",
+        "Do NOT uninstall r3f-globe or @react-three/fiber or @react-three/drei yet"
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "react-globe.gl wraps the same three-globe core as r3f-globe but manages the full rendering pipeline including CSS2DRenderer"
     },
     {
       "id": "US-002",
-      "title": "Create GET /api/media/geo endpoint",
-      "description": "As a developer, I need an API route that returns all geo-tagged media across the user's groups so the globe can display them.",
+      "title": "Rewrite photo-globe.tsx to use react-globe.gl Globe component",
+      "description": "As a developer, I need to replace the R3F Canvas + r3f-globe setup with react-globe.gl's standalone Globe component which handles WebGLRenderer + CSS2DRenderer internally.",
       "acceptanceCriteria": [
-        "New file at src/app/api/media/geo/route.ts with GET handler",
-        "Uses createServerComponentClient() for auth (respects RLS)",
-        "Queries media_assets WHERE latitude IS NOT NULL AND longitude IS NOT NULL",
-        "Joins with groups table to include group name",
-        "Only returns media from groups the authenticated user is a member of",
-        "Response shape: { points: Array<{ id, groupId, groupName, lat, lng, thumbnailKey, filename, locationCountry, locationCity }> }",
-        "Selects only required columns (id, group_id, latitude, longitude, thumbnail_key, filename, location_country, location_city)",
-        "Returns 401 if user is not authenticated",
-        "Typecheck passes"
+        "Replace R3F imports (Canvas from @react-three/fiber, OrbitControls from @react-three/drei, R3fGlobe from r3f-globe, OrbitControlsImpl from three-stdlib) with: import Globe from 'react-globe.gl' (default import)",
+        "Do NOT wrap Globe in <Canvas> — react-globe.gl creates its own canvas internally",
+        "Remove <ambientLight>, <directionalLight>, <OrbitControls> — react-globe.gl manages these",
+        "Use useRef<any>(null) for the Globe ref (globeEl)",
+        "Set Globe props: globeImageUrl, bumpImageUrl, showAtmosphere={true}, atmosphereColor='lightskyblue', atmosphereAltitude={0.2}, backgroundColor='#0a0a0a'",
+        "For sizing: measure the container div using a ref and ResizeObserver, pass width and height as number props to Globe. Or use the window inner dimensions minus nav height (56px)",
+        "After globe mounts (useEffect with globeEl.current check): set globeEl.current.controls().autoRotate = true, autoRotateSpeed = 0.5, enablePan = false, minDistance = 120, maxDistance = 800",
+        "Auto-rotation pause on interaction: globeEl.current.controls().addEventListener('start', ...) to set autoRotate=false, addEventListener('end', ...) to resume after 3s idle setTimeout",
+        "Set initial point of view: globeEl.current.pointOfView({ altitude: 2.5 }) after mount",
+        "Keep globe fade-in: opacity 0→1 container div with onGlobeReady callback setting state to true",
+        "Keep empty state: if (!loading && points.length === 0) return 'No photos with location data yet' message",
+        "CRITICAL: All hooks (useState, useRef, useCallback, useMemo, useEffect) must be declared BEFORE any early return statement",
+        "The parent page src/app/(dashboard)/map/page.tsx already uses next/dynamic with { ssr: false } — verify it still imports correctly",
+        "npm run type-check passes",
+        "npm run build succeeds"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Response uses 'lat'/'lng' field names to match r3f-globe's default htmlLat/htmlLng accessors"
+      "notes": "react-globe.gl is NOT an R3F component. It manages its own Three.js scene and renderers. Do NOT use <Canvas>. Access controls via ref: globeEl.current.controls(). The Globe component renders a canvas element directly."
     },
     {
       "id": "US-003",
-      "title": "Create useGeoMedia hook",
-      "description": "As a developer, I need a client-side hook that fetches the geo endpoint and caches the result for the globe component to consume.",
+      "title": "Wire up HTML markers with htmlElementsData",
+      "description": "As a user, I want to see my photo thumbnails on the globe at their GPS coordinates, rendered as interactive HTML elements using react-globe.gl's built-in CSS2DRenderer.",
       "acceptanceCriteria": [
-        "New file at src/presentation/hooks/use-geo-media.ts",
-        "Hook calls GET /api/media/geo on mount",
-        "Returns { points, loading, error, refresh }",
-        "Caches result in state (does not refetch on re-render)",
-        "Handles error state (fetch failure, 401)",
-        "Exports GeoPoint type: { id: string, groupId: string, groupName: string, lat: number, lng: number, thumbnailKey: string, filename: string, locationCountry?: string, locationCity?: string }",
-        "Typecheck passes"
+        "Pass htmlElementsData={clusterData} to Globe component (same ClusterMarkerData[] state as before)",
+        "Pass htmlLat='lat' and htmlLng='lng' string accessors",
+        "Pass htmlAltitude={0.01}",
+        "Pass htmlElement accessor: (d) => createMarkerElement(d as ClusterMarkerData, handleNavigate) — reuse existing create-marker-element.ts",
+        "Pass htmlTransitionDuration={500}",
+        "Keep the existing useEffect that fetches thumbnail URLs via useUrlCache and builds clusterData from clusters",
+        "Keep useGeoMedia() hook for fetching geo points",
+        "Keep clusterPoints() from geo-utils.ts for clustering",
+        "CRITICAL: Markers must be VISIBLE on the globe — this is the whole point of switching to react-globe.gl",
+        "Clicking a single marker navigates to /groups/{groupId}",
+        "Hovering a cluster fans out thumbnails, clicking navigates to group",
+        "npm run type-check passes",
+        "npm run build succeeds",
+        "Verify in browser using dev-browser skill — markers must be visible on the globe"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "GeoPoint uses 'lat'/'lng' to match r3f-globe's default htmlLat/htmlLng accessors"
+      "notes": "react-globe.gl automatically sets up CSS2DRenderer, which is why HTML markers will now render. The htmlElement prop signature is identical: (d: object) => HTMLElement. The existing createMarkerElement function should work as-is."
     },
     {
       "id": "US-004",
-      "title": "Create /map route page with dynamic import shell",
-      "description": "As a user, I want to access the globe view from the dashboard navigation at /map.",
+      "title": "Wire up labels and verify full functionality",
+      "description": "As a user, I want location labels near photo clusters and full interactive globe functionality.",
       "acceptanceCriteria": [
-        "New file at src/app/(dashboard)/map/page.tsx inside the existing dashboard route group",
-        "Page has 'use client' directive",
-        "Globe component is imported via next/dynamic with { ssr: false }",
-        "Shows a centered loading spinner/skeleton while the globe component loads",
-        "The dynamic import points to a placeholder component at src/presentation/components/globe/photo-globe.tsx (can be a simple div for now)",
-        "Add a 'Map' link to the dashboard nav bar in src/app/(dashboard)/layout.tsx next to existing links",
-        "Globe container fills viewport height minus nav bar (h-[calc(100dvh-64px)] or equivalent)",
-        "Typecheck passes",
+        "Pass labelsData, labelLat='lat', labelLng='lng', labelText='text' to Globe",
+        "labelColor={() => 'rgba(255,255,255,0.6)'}",
+        "labelSize={0.4}, labelAltitude={0.015}, labelDotRadius={0}",
+        "labelsTransitionDuration={500}",
+        "Auto-rotation works: globe slowly spins when idle",
+        "Auto-rotation pauses on user drag/zoom, resumes after 3 seconds",
+        "Pan is disabled (enablePan = false on controls)",
+        "Globe has atmospheric glow effect",
+        "Globe fades in on initial load",
+        "Empty state shows when no geo-tagged photos exist",
+        "npm run type-check passes",
+        "npm run build succeeds",
         "Verify in browser using dev-browser skill"
       ],
       "priority": 4,
       "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-005",
-      "title": "Create geo-utils with clustering logic",
-      "description": "As a developer, I need a utility function to cluster nearby geo points so the globe isn't cluttered with overlapping markers.",
-      "acceptanceCriteria": [
-        "New file at src/presentation/components/globe/geo-utils.ts",
-        "Export function clusterPoints(points: GeoPoint[], distanceThresholdKm: number): Array<{ center: { lat: number, lng: number }, points: GeoPoint[] }> that groups nearby points",
-        "Clustering uses haversine distance formula for geographic accuracy",
-        "Default distance threshold is configurable (suggest 50km)",
-        "Single points (no neighbors within threshold) become clusters of size 1",
-        "Cluster center is the average lat/lng of its members",
-        "Export haversineDistance(lat1, lng1, lat2, lng2) helper for reuse",
-        "Typecheck passes"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": "latLngToVector3 is NOT needed — r3f-globe's HTML Elements Layer handles lat/lng to 3D positioning natively"
-    },
-    {
-      "id": "US-006",
-      "title": "Render Earth globe with R3F Canvas and r3f-globe",
-      "description": "As a developer, I need the base 3D scene with an Earth globe rendered inside the photo-globe component.",
-      "acceptanceCriteria": [
-        "Update src/presentation/components/globe/photo-globe.tsx to render an R3F <Canvas>",
-        "Canvas has dark background (matching app theme, e.g. #0a0a0a)",
-        "r3f-globe component renders inside the Canvas with earth-day or earth-night texture",
-        "Globe has atmospheric glow effect (r3f-globe atmosphereColor and atmosphereAltitude props)",
-        "OrbitControls from drei: rotation enabled, zoom enabled (minDistance and maxDistance set), pan disabled (enablePan={false})",
-        "Auto-rotate enabled by default (autoRotate={true}, autoRotateSpeed={0.5})",
-        "Camera positioned at a distance that shows the full globe on load",
-        "Globe fills its container div completely",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-007",
-      "title": "Render photo thumbnail markers using r3f-globe HTML Elements Layer",
-      "description": "As a user, I want to see my photo thumbnails floating on the globe at the locations where they were taken, using r3f-globe's built-in HTML Elements Layer for positioning and occlusion.",
-      "acceptanceCriteria": [
-        "New file at src/presentation/components/globe/create-marker-element.ts — a function that creates a DOM element for a single marker",
-        "photo-globe.tsx uses useGeoMedia() to fetch geo points",
-        "Uses useUrlCache from existing hooks to get presigned thumbnail URLs for each point's thumbnailKey",
-        "Pass clustered data to r3f-globe via htmlElementsData prop",
-        "Use htmlLat='lat' and htmlLng='lng' accessors (matching GeoPoint field names)",
-        "Set htmlAltitude={0.01} to lift markers slightly above globe surface",
-        "htmlElement accessor calls createMarkerElement() which returns a DOM element via document.createElement()",
-        "Each marker DOM element is a 40px circular div with overflow:hidden, border-radius:50%, white 2px border, containing an <img> with the thumbnail URL",
-        "htmlElementVisibilityModifier toggles opacity to 0/1 for occlusion (hiding markers behind the globe)",
-        "htmlTransitionDuration={500} for smooth position transitions",
-        "Cursor set to pointer on marker elements via CSS",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": "Using r3f-globe's native HTML Elements Layer (htmlElementsData, htmlElement, htmlLat, htmlLng, htmlElementVisibilityModifier) instead of drei <Html>. This handles lat/lng positioning, occlusion, and transitions natively. Trade-off: markers are imperative DOM elements (document.createElement), not React JSX."
-    },
-    {
-      "id": "US-008",
-      "title": "Implement thumbnail stacking for clustered markers",
-      "description": "As a user, I want nearby photos to stack together so the globe isn't cluttered, with a count badge showing how many photos are in each stack.",
-      "acceptanceCriteria": [
-        "photo-globe.tsx uses clusterPoints() from geo-utils to group nearby points before passing to htmlElementsData",
-        "Each cluster becomes one entry in htmlElementsData with center lat/lng and its array of points",
-        "createMarkerElement handles both single-point and multi-point clusters",
-        "Clusters of 1: single circular thumbnail (40px)",
-        "Clusters of 2+: overlapping circular thumbnails (max 3 visible, offset by 8px each) built as nested DOM elements",
-        "Clusters with more than 3 photos show a '+N' count badge (small pill div, positioned at top-right of the stack)",
-        "Stack thumbnails have box-shadow for depth effect",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": "Cluster data shape passed to htmlElementsData: { lat, lng, points: GeoPoint[], thumbnailUrls: string[] }"
-    },
-    {
-      "id": "US-009",
-      "title": "Add fan-out animation on cluster hover",
-      "description": "As a user, I want to hover over a stacked cluster and see the individual photos fan out so I can see each one.",
-      "acceptanceCriteria": [
-        "On mouseenter over a cluster DOM element, child thumbnail divs animate from stacked position to a circular fan-out arrangement via CSS transitions",
-        "Fan-out shows up to 8 thumbnails positioned in a circle (using transform: translate + rotate)",
-        "If more than 8 photos in cluster, show first 7 + a '+N more' text indicator",
-        "On mouseleave, thumbnails animate back to stacked position",
-        "Animation uses CSS transitions on transform + opacity (200ms ease-out)",
-        "Each fanned-out thumbnail has its own click handler (set via onclick on the DOM element)",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": "All animation is pure CSS transitions on DOM elements created in createMarkerElement. No React state needed — toggle a CSS class on mouseenter/mouseleave."
-    },
-    {
-      "id": "US-010",
-      "title": "Click marker/cluster to navigate to group",
-      "description": "As a user, I want to click a photo marker to navigate to the group containing that photo.",
-      "acceptanceCriteria": [
-        "Clicking a single marker navigates to /groups/{groupId}",
-        "Clicking a fanned-out thumbnail navigates to that photo's group",
-        "Clicking a stacked (not fanned) cluster: if all photos are from the same group, navigate directly; if mixed groups, fan out first",
-        "Navigation uses window.location.href or a callback passed into createMarkerElement (since markers are imperative DOM, not React components)",
-        "Navigation does not conflict with OrbitControls (click vs drag detection — use pointer-events:auto on markers and stopPropagation)",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": "Since markers are DOM elements outside React, navigation can use window.location.href='/groups/{id}' or accept a callback from the parent component"
-    },
-    {
-      "id": "US-011",
-      "title": "Add location labels using r3f-globe Labels Layer",
-      "description": "As a user, I want to see country/city names near photo clusters for geographic context.",
-      "acceptanceCriteria": [
-        "Use r3f-globe's built-in Labels Layer (labelsData, labelLat, labelLng, labelText props) instead of custom HTML elements",
-        "Build labels array from cluster data: one label per cluster using locationCity or locationCountry",
-        "Deduplicate labels: if multiple clusters share the same label text and are nearby, only include one",
-        "labelColor set to semi-transparent white (rgba(255,255,255,0.6))",
-        "labelSize set to 0.4 (subtle, not overwhelming)",
-        "labelAltitude set to 0.015 (slightly above markers)",
-        "labelDotRadius set to 0 (no dot marker, just text)",
-        "labelsTransitionDuration={500} for smooth transitions",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": "Using r3f-globe's native Labels Layer rather than HTML elements for labels. This renders labels as 3D text on the globe surface, which looks more integrated."
-    },
-    {
-      "id": "US-012",
-      "title": "Add animated transitions and visual polish",
-      "description": "As a user, I want the globe experience to feel smooth and polished with entrance animations and idle auto-rotation.",
-      "acceptanceCriteria": [
-        "Globe fades in on initial load (opacity 0 to 1 over 500ms on the container div)",
-        "Markers animate in via htmlTransitionDuration — they transition from altitude 0 to their target altitude for a 'pop-up' entrance effect",
-        "Auto-rotate pauses when user interacts (drag/zoom), resumes after 3 seconds of idle",
-        "Overall performance: smooth 60fps with up to 500 markers (verified by keeping DOM nodes low via clustering)",
-        "Empty state: if no geo-tagged photos exist, show a message 'No photos with location data yet' centered on the page instead of the globe",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 12,
-      "passes": true,
-      "notes": "Leverage htmlTransitionDuration and htmlElementVisibilityModifier for marker animations rather than custom JS animation code"
+      "notes": "react-globe.gl supports the same label props as r3f-globe since they share the three-globe core. labelIncludeDot may or may not be supported — if not, just use labelDotRadius={0}."
     }
   ]
 }
