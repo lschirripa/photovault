@@ -8,16 +8,25 @@ import { useGeoMedia } from "@/presentation/hooks/use-geo-media";
 import { useUrlCache } from "@/presentation/hooks/use-url-cache";
 import {
   createMarkerElement,
+  GlobeElementData,
   type ClusterMarkerData,
 } from "./create-marker-element";
-import { clusterPoints, haversineDistance } from "./geo-utils";
+import { clusterPoints } from "./geo-utils";
+import { ClusterPopup } from "./cluster-popup";
+
+interface GroupData {
+  groupId: string;
+  groupName: string;
+  locationCity?: string;
+  locationCountry?: string;
+  thumbnailUrl?: string | null;
+  pointCount: number;
+}
 
 const GLOBE_IMAGE_URL =
-  "//cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg";
+  "https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg";
 const BUMP_IMAGE_URL =
-  "//cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png";
-
-const NAV_HEIGHT = 56;
+  "https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png";
 
 export default function PhotoGlobe() {
   const globeEl = useRef<GlobeMethods | undefined>(undefined);
@@ -28,6 +37,23 @@ export default function PhotoGlobe() {
   const [clusterData, setClusterData] = useState<ClusterMarkerData[]>([]);
   const [globeReady, setGlobeReady] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [selectedCluster, setSelectedCluster] = useState<{
+    lat: number;
+    lng: number;
+    groups: GroupData[];
+  } | null>(null);
+
+  useEffect(() => {
+    const updateDimensions = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight - 56, // NAV_HEIGHT
+      });
+    };
+    updateDimensions();
+    window.addEventListener("resize", updateDimensions);
+    return () => window.removeEventListener("resize", updateDimensions);
+  }, []);
 
   const handleNavigate = useCallback(
     (path: string) => {
@@ -41,53 +67,6 @@ export default function PhotoGlobe() {
     [points],
   );
 
-  // Build deduplicated labels from cluster location data
-  const labelsData = useMemo(() => {
-    if (clusters.length === 0) return [];
-
-    const rawLabels: Array<{ lat: number; lng: number; text: string }> = [];
-    for (const cluster of clusters) {
-      const firstWithCity = cluster.points.find((p) => p.locationCity);
-      const firstWithCountry = cluster.points.find((p) => p.locationCountry);
-      const text =
-        firstWithCity?.locationCity ?? firstWithCountry?.locationCountry ?? "";
-      if (!text) continue;
-      rawLabels.push({
-        lat: cluster.center.lat,
-        lng: cluster.center.lng,
-        text,
-      });
-    }
-
-    const deduped: typeof rawLabels = [];
-    for (const label of rawLabels) {
-      const duplicate = deduped.some(
-        (existing) =>
-          existing.text === label.text &&
-          haversineDistance(existing.lat, existing.lng, label.lat, label.lng) <
-            100,
-      );
-      if (!duplicate) {
-        deduped.push(label);
-      }
-    }
-
-    return deduped;
-  }, [clusters]);
-
-  // Measure container dimensions
-  useEffect(() => {
-    const updateDimensions = () => {
-      setDimensions({
-        width: window.innerWidth,
-        height: window.innerHeight - NAV_HEIGHT,
-      });
-    };
-    updateDimensions();
-    window.addEventListener("resize", updateDimensions);
-    return () => window.removeEventListener("resize", updateDimensions);
-  }, []);
-
   // Fetch thumbnail URLs for all geo points, then build cluster marker data
   useEffect(() => {
     if (points.length === 0 || clusters.length === 0) return;
@@ -97,12 +76,27 @@ export default function PhotoGlobe() {
     fetchUrls(assetIds, "thumbnail")
       .then((urls) => {
         if (cancelled) return;
-        const data: ClusterMarkerData[] = clusters.map((cluster) => ({
-          lat: cluster.center.lat,
-          lng: cluster.center.lng,
-          points: cluster.points,
-          thumbnailUrls: cluster.points.map((p) => urls[p.id] ?? null),
-        }));
+        const data: ClusterMarkerData[] = clusters.map((cluster) => {
+          const firstWithCity = cluster.points.find((p) => p.locationCity);
+          const firstWithCountry = cluster.points.find(
+            (p) => p.locationCountry,
+          );
+          const label =
+            firstWithCity?.locationCity ??
+            firstWithCountry?.locationCountry ??
+            undefined;
+
+          return {
+            type: "marker",
+            lat: cluster.center.lat,
+            lng: cluster.center.lng,
+            points: cluster.points,
+            thumbnailUrls: cluster.points
+              .map((p) => urls[p.id] ?? "")
+              .filter(Boolean),
+            label,
+          };
+        });
         setClusterData(data);
       })
       .catch(() => {
@@ -156,6 +150,24 @@ export default function PhotoGlobe() {
     };
   }, [globeReady]);
 
+  // Handle auto-rotation based on popup state
+  useEffect(() => {
+    if (!globeEl.current) return;
+    const controls = globeEl.current.controls();
+
+    if (selectedCluster) {
+      controls.autoRotate = false;
+      // Also clear idle timer to prevent it from restarting
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    } else {
+      // Resume rotation if no popup
+      controls.autoRotate = true;
+    }
+  }, [selectedCluster]);
+
   const handleGlobeReady = useCallback(() => {
     setGlobeReady(true);
   }, []);
@@ -176,7 +188,7 @@ export default function PhotoGlobe() {
         transition: "opacity 500ms ease-in",
       }}
     >
-      <Globe
+      {dimensions.width === 0 || dimensions.height === 0 ? null : <Globe
         ref={globeEl}
         width={dimensions.width}
         height={dimensions.height}
@@ -192,19 +204,68 @@ export default function PhotoGlobe() {
         htmlLng="lng"
         htmlAltitude={0.01}
         htmlElement={(d: object) =>
-          createMarkerElement(d as ClusterMarkerData, handleNavigate)
+          createMarkerElement(
+            d as GlobeElementData,
+            handleNavigate,
+            (markerData: ClusterMarkerData) => {
+              const groupsMap = new Map<
+                string,
+                {
+                  groupId: string;
+                  groupName: string;
+                  locationCity?: string;
+                  locationCountry?: string;
+                  thumbnailUrl?: string | null;
+                  pointCount: number;
+                }
+              >();
+
+              markerData.points.forEach((p, idx) => {
+                const existing = groupsMap.get(p.groupId);
+                if (existing) {
+                  existing.pointCount++;
+                } else {
+                  groupsMap.set(p.groupId, {
+                    groupId: p.groupId,
+                    groupName: p.groupName,
+                    locationCity: p.locationCity,
+                    locationCountry: p.locationCountry,
+                    thumbnailUrl: markerData.thumbnailUrls[idx],
+                    pointCount: 1,
+                  });
+                }
+              });
+
+              const groups = Array.from(groupsMap.values());
+              // MOCK FOR TESTING: Duplicate groups to test carousel
+              const testGroups = [...groups, ...groups, ...groups].map(
+                (g, i) => ({
+                  ...g,
+                  groupId: `${g.groupId}-test-${i}`, // Ensure unique keys if used
+                }),
+              );
+
+              setSelectedCluster({
+                lat: markerData.lat,
+                lng: markerData.lng,
+                groups: testGroups,
+              });
+            },
+          )
         }
         htmlTransitionDuration={500}
-        labelsData={labelsData}
-        labelLat="lat"
-        labelLng="lng"
-        labelText="text"
-        labelColor={() => "rgba(255,255,255,0.6)"}
-        labelSize={0.4}
-        labelAltitude={0.015}
-        labelDotRadius={0}
-        labelsTransitionDuration={500}
-      />
+      />}
+      {selectedCluster && (
+        <div className="absolute inset-0 z-[50] flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto">
+            <ClusterPopup
+              groups={selectedCluster.groups}
+              onNavigate={handleNavigate}
+              onClose={() => setSelectedCluster(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
