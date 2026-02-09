@@ -1,0 +1,113 @@
+# PhotoVault Scalability Plan
+
+## Problem Summary
+Before uploading many photos, the app has several bottlenecks that will degrade with scale:
+- N+1 URL fetching: Each thumbnail triggers a separate API call (100 photos = 100 requests)
+- Sequential uploads: Files upload one at a time with no concurrency
+- No pagination: ALL media loaded at once into memory and DOM
+- No DOM virtualization: Every image rendered even when off-screen
+- Memory buffering: Entire images loaded into memory for processing/download
+- Missing DB indexes: Queries will slow as data grows
+
+---
+
+## Phase 1: Critical Foundation
+
+### 1A. Batch URL Endpoint
+Files: New src/app/api/media/urls/route.ts, modify group page + album page
+
+- Create POST /api/media/urls accepting { assetIds: string[], type: "thumbnail" | "original" }
+- Returns { urls: Record<string, string> } with all presigned URLs in one request
+- Update both pages to call batch endpoint instead of N individual fetches
+- Impact: 100 requests -> 1 request per page load
+
+### 1B. Parallel Uploads with Concurrency Limit
+Files: src/presentation/hooks/use-media-upload.ts
+
+- Replace sequential for...of loop with concurrency-limited parallel uploads (limit: 3)
+- Add per-file progress tracking (pending/uploading/done/error states)
+- Impact: 10 photos upload ~3x faster
+
+### 1C. Cursor-Based Pagination + Infinite Scroll
+Files: Group page, album page, new src/presentation/hooks/use-infinite-media.ts
+
+- Add cursor and limit params to media queries (cursor = last item's created_at)
+- Load 50 items initially, fetch next page when user scrolls near bottom (IntersectionObserver)
+- Impact: Initial load stays fast regardless of total photo count
+
+### 1D. Database Indexes
+Files: New Supabase migration
+
+- Add composite indexes:
+  - media_assets(group_id, created_at DESC) -- main gallery query
+  - media_assets(group_id, status) -- filtering by status
+  - album_media(album_id, added_at DESC) -- album media listing
+- Impact: Query performance stays constant as data grows
+
+---
+
+## Phase 2: Performance Polish
+
+### 2A. Client-Side URL Cache with TTL
+Files: New src/presentation/hooks/use-url-cache.ts, update pages
+
+- Cache presigned URLs in memory with ~45min TTL (R2 URLs typically valid for 1hr)
+- Avoid re-fetching URLs when navigating back to a page
+- Impact: Eliminates redundant URL fetches on navigation
+
+### 2B. DOM Virtualization
+Files: src/presentation/components/gallery/media-grid.tsx
+
+- Install @tanstack/react-virtual
+- Only render images visible in viewport + small buffer
+- Impact: 1000 photos render as smoothly as 20
+
+### 2C. Lightbox Preloading
+Files: src/presentation/components/gallery/lightbox.tsx
+
+- Preload adjacent images (prev/next) when viewing a photo in lightbox
+- Use <link rel="prefetch"> or new Image() for the URLs
+- Impact: Instant navigation between photos in lightbox
+
+### 2D. Cache Headers on URL Responses
+Files: src/app/api/media/urls/route.ts (batch endpoint)
+
+- Add Cache-Control: private, max-age=2700 (45 min) to URL responses
+- Impact: Browser caches URL responses, fewer API calls
+
+---
+
+## Phase 3: Reliability & Cleanup
+
+### 3A. Upload Retry with Exponential Backoff
+Files: src/presentation/hooks/use-media-upload.ts
+
+- Retry failed uploads up to 3 times with exponential backoff
+- Show retry state in UI per file
+- Impact: Flaky network doesn't lose uploads
+
+### 3B. Streaming Downloads
+Files: src/app/api/media/download/route.ts
+
+- Replace arrayBuffer() buffering with streaming (pipe R2 response to client)
+- Impact: Constant memory usage regardless of file size
+
+### 3C. Orphaned Upload Cleanup
+Files: New API route or cron job
+
+- Find media_assets with status = 'uploading' older than 1 hour
+- Delete the DB records and any partial R2 objects
+- Impact: No stale records accumulating in the database
+
+### 3D. Defer Metadata Extraction
+Files: src/app/api/media/confirm/route.ts, src/app/api/webhooks/thumbnail/route.ts
+
+- Move EXIF/metadata extraction from the confirm endpoint to the thumbnail webhook
+- Confirm endpoint returns immediately, webhook does heavy processing
+- Impact: Faster upload confirmation, better user experience
+
+---
+
+## Implementation Order
+Phase 1 (1A -> 1B -> 1C -> 1D) should be done first -- these are the blocking scalability issues.
+Phase 2 and 3 can be done in any order after Phase 1.

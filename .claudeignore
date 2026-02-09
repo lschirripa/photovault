@@ -1,0 +1,32 @@
+# --- Security (CRITICAL) ---
+*.pem
+*.key
+id_rsa
+
+# --- System & Logs ---
+.git/
+.svn/
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+coverage/
+
+# --- Dependencies (Massive Token Wasters) ---
+node_modules/
+bower_components/
+jspm_packages/
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+
+# --- Build Outputs ---
+.next/
+dist/
+build/
+out/
+.vercel/

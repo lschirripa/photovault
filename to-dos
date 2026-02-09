@@ -1,0 +1,26 @@
+
+⏺ This is a Supabase configuration issue. You need to enable Google and GitHub OAuth providers in your Supabase dashboard.
+
+  Enable OAuth Providers in Supabase
+
+  1. Go to Supabase Dashboard → Your project → Authentication → Providers
+  2. For Google:
+    - Click on Google
+    - Toggle Enable Sign in with Google
+    - Add your Client ID and Client Secret from https://console.cloud.google.com/apis/credentials
+    - Set the redirect URL in Google Console to: https://<your-project-ref>.supabase.co/auth/v1/callback
+  3. For GitHub:
+    - Click on GitHub
+    - Toggle Enable Sign in with GitHub
+    - Add your Client ID and Client Secret from https://github.com/settings/developers
+    - Set the callback URL in GitHub to: https://<your-project-ref>.supabase.co/auth/v1/callback
+
+  Quick Setup Links
+
+  - Google OAuth: Create credentials at https://console.cloud.google.com/apis/credentials → Create OAuth 2.0 Client ID
+  - GitHub OAuth: Create an OAuth App at https://github.com/settings/developers
+
+  For both, the Authorized redirect URI / Callback URL should be:
+  https://<your-supabase-project-ref>.supabase.co/auth/v1/callback
+
+  You can find your project ref in your Supabase URL (it's the subdomain part).
