@@ -67,11 +67,11 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen p-4 sm:p-8">
       <header className="mb-8">
-        <h1 className="text-2xl font-bold">Settings</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
       </header>
 
       <div className="max-w-2xl space-y-8">
-        <section className="border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+        <section className="border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-semibold mb-4">Account</h2>
           <div className="space-y-4">
             <div>
@@ -85,18 +85,18 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+        <section className="border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-semibold mb-4">Session</h2>
           <button
             onClick={handleSignOut}
             disabled={signingOut}
-            className="px-4 py-2 border border-red-300 dark:border-red-800 text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+            className="px-4 py-2 border border-red-300 dark:border-red-800 text-red-600 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
           >
             {signingOut ? "Signing out..." : "Sign out"}
           </button>
         </section>
 
-        <section className="border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+        <section className="border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-semibold mb-4">Maintenance</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Remove orphaned uploads stuck in &quot;uploading&quot; or &quot;processing&quot; state for over 1 hour.
@@ -105,7 +105,7 @@ export default function SettingsPage() {
           <button
             onClick={handleCleanup}
             disabled={cleanupRunning}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
           >
             {cleanupRunning ? "Cleaning up..." : "Clean up orphaned uploads"}
           </button>
@@ -123,7 +123,7 @@ export default function SettingsPage() {
           )}
         </section>
 
-        <section className="border border-gray-200 dark:border-gray-800 rounded-lg p-6">
+        <section className="border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-semibold mb-4">About</h2>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             PhotoVault - Private group-based photo and video sharing

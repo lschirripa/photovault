@@ -13,7 +13,10 @@
       "Bash(head:*)",
       "Bash(grep:*)",
       "Bash(cat:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git fetch:*)",
+      "Bash(git stash:*)",
+      "Bash(npm ls:*)"
     ]
   }
 }

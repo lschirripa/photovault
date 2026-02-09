@@ -64,13 +64,13 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md"
       onClick={handleBackdropClick}
     >
       <div
         ref={dialogRef}
         className={cn(
-          "bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full mx-4 p-6",
+          "bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full mx-4 p-6 border border-gray-200/80 dark:border-gray-800/80",
           "animate-in fade-in zoom-in-95 duration-200"
         )}
         role="dialog"

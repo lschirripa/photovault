@@ -20,7 +20,7 @@ export function AlbumCard({
   canManage = false,
 }: AlbumCardProps) {
   return (
-    <div className="group relative bg-gray-100 dark:bg-gray-900 rounded-lg overflow-hidden">
+    <div className="group relative bg-gray-100 dark:bg-gray-900 rounded-xl overflow-hidden transition-transform duration-200 hover:scale-[1.02]">
       <Link href={`/groups/${album.groupId}/albums/${album.id}`}>
         <div className="aspect-square relative">
           {coverUrl ? (
@@ -50,7 +50,7 @@ export function AlbumCard({
             </div>
           )}
           {/* Gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           {/* Album info */}
           <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
             <h3 className="font-semibold truncate">{album.name}</h3>

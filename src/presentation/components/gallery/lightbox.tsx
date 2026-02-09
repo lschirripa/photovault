@@ -147,7 +147,7 @@ export function Lightbox({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/95 flex flex-col"
+      className="fixed inset-0 z-50 bg-black/[0.97] flex flex-col"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -261,7 +261,7 @@ export function Lightbox({
           onClick={goPrev}
           disabled={!hasPrev}
           className={cn(
-            "absolute left-4 z-10 p-3 rounded-full bg-black/50 text-white transition-all",
+            "absolute left-4 z-10 p-4 sm:p-3 rounded-full bg-black/50 text-white transition-all",
             hasPrev
               ? "hover:bg-black/70 opacity-100"
               : "opacity-30 cursor-not-allowed"
@@ -276,7 +276,7 @@ export function Lightbox({
         <div
           className={cn(
             "relative max-w-full max-h-full w-full h-full flex items-center justify-center p-4 transition-all duration-200",
-            showInfo && "mr-80"
+            showInfo && "md:mr-80"
           )}
         >
           {currentMedia.mediaType === "video" ? (
@@ -308,8 +308,8 @@ export function Lightbox({
           onClick={goNext}
           disabled={!hasNext}
           className={cn(
-            "absolute z-10 p-3 rounded-full bg-black/50 text-white transition-all",
-            showInfo ? "right-[21rem]" : "right-4",
+            "absolute z-10 p-4 sm:p-3 rounded-full bg-black/50 text-white transition-all",
+            showInfo ? "right-4 md:right-[21rem]" : "right-4",
             hasNext
               ? "hover:bg-black/70 opacity-100"
               : "opacity-30 cursor-not-allowed"
@@ -334,7 +334,7 @@ export function Lightbox({
       )}
 
       {/* Thumbnail strip */}
-      <div className="p-4 overflow-x-auto">
+      <div className="p-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory md:snap-none bg-black/30 backdrop-blur-sm border-t border-white/10">
         <div className="flex gap-2 justify-center">
           {media.map((item, index) => {
             const thumbUrl = mediaUrls.get(item.id);
@@ -345,7 +345,7 @@ export function Lightbox({
                 className={cn(
                   "w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all",
                   index === currentIndex
-                    ? "border-white opacity-100"
+                    ? "border-white shadow-lg shadow-white/20 opacity-100"
                     : "border-transparent opacity-50 hover:opacity-75"
                 )}
               >

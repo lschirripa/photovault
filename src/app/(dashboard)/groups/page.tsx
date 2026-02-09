@@ -1,24 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/presentation/providers/auth-provider";
 import { useGroups } from "@/presentation/hooks/use-groups";
+import { useUrlCache } from "@/presentation/hooks/use-url-cache";
+import { MemberRole } from "@/domain/enums/member-role";
+import { Button } from "@/presentation/components/ui/button";
+import { GroupCard } from "@/presentation/components/groups/group-card";
+import { GroupHero } from "@/presentation/components/groups/group-hero";
 
 export default function GroupsPage() {
   const { user, loading: authLoading } = useAuth();
   const { groups, loading, error, fetchGroups, createGroup, deleteGroup } = useGroups();
+  const { fetchUrls } = useUrlCache();
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDescription, setNewGroupDescription] = useState("");
   const [deleteConfirmGroupId, setDeleteConfirmGroupId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
 
+  // Hero group: first group with recent media
+  const heroGroup = useMemo(
+    () => groups.find((g) => g.recentMediaIds.length > 0) ?? null,
+    [groups]
+  );
+
+  // Fetch groups on mount
   useEffect(() => {
     if (user) {
       fetchGroups();
     }
   }, [user, fetchGroups]);
+
+  // Fetch thumbnail URLs when groups load
+  useEffect(() => {
+    const allMediaIds = groups.flatMap((g) => g.recentMediaIds);
+    if (allMediaIds.length === 0) return;
+
+    fetchUrls(allMediaIds, "thumbnail").then(setThumbnailUrls);
+  }, [groups, fetchUrls]);
 
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +58,7 @@ export default function GroupsPage() {
     }
   };
 
-  const handleDeleteGroup = async () => {
+  const handleDeleteGroup = useCallback(async () => {
     if (!deleteConfirmGroupId) return;
     setIsDeleting(true);
     try {
@@ -46,7 +69,7 @@ export default function GroupsPage() {
     } finally {
       setIsDeleting(false);
     }
-  };
+  }, [deleteConfirmGroupId, deleteGroup]);
 
   if (authLoading) {
     return (
@@ -71,87 +94,69 @@ export default function GroupsPage() {
 
   return (
     <div className="min-h-screen p-4 sm:p-8">
-      <header className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold">My Groups</h1>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 bg-foreground text-background rounded-lg hover:opacity-90"
-        >
-          Create Group
-        </button>
-      </header>
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Hero Banner */}
+        {heroGroup && (
+          <GroupHero group={heroGroup} thumbnailUrls={thumbnailUrls} />
+        )}
 
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-        </div>
-      )}
+        {/* Header */}
+        <header className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold tracking-tight">My Groups</h1>
+          <Button onClick={() => setShowCreateModal(true)}>
+            Create Group
+          </Button>
+        </header>
 
-      {loading ? (
-        <p>Loading groups...</p>
-      ) : groups.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            You don&apos;t have any groups yet
-          </p>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="text-blue-600 hover:underline"
-          >
-            Create your first group
-          </button>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {groups.map((group) => (
-            <div
-              key={group.id}
-              className="relative p-4 border border-gray-200 dark:border-gray-800 rounded-lg hover:border-gray-300 dark:hover:border-gray-700 transition-colors"
+        {/* Error */}
+        {error && (
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          </div>
+        )}
+
+        {/* Groups grid */}
+        {loading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="aspect-[4/3] rounded-xl bg-gray-200 dark:bg-gray-800 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : groups.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              You don&apos;t have any groups yet
+            </p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="text-blue-600 hover:underline"
             >
-              <Link href={`/groups/${group.id}`} className="block">
-                <h2 className="font-semibold mb-1 pr-8">{group.name}</h2>
-                {group.description && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                    {group.description}
-                  </p>
-                )}
-                <p className="text-xs text-gray-500 mt-2">
-                  Created {group.createdAt.toLocaleDateString()}
-                </p>
-              </Link>
-              {group.createdBy === user?.id && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setDeleteConfirmGroupId(group.id);
-                  }}
-                  className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                  title="Delete group"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+              Create your first group
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {groups.map((group) => (
+              <GroupCard
+                key={group.id}
+                group={group}
+                thumbnailUrls={thumbnailUrls}
+                isOwner={group.userRole === MemberRole.OWNER}
+                onDelete={() => setDeleteConfirmGroupId(group.id)}
+              />
+            ))}
+          </div>
+        )}
 
+      </div>
+
+      {/* Create Group Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-background border border-gray-200 dark:border-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-background border border-gray-200 dark:border-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md">
             <h2 className="text-xl font-semibold mb-4">Create New Group</h2>
             <form onSubmit={handleCreateGroup} className="space-y-4">
               <div>
@@ -180,51 +185,57 @@ export default function GroupsPage() {
                 />
               </div>
               <div className="flex gap-3">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900"
+                  className="flex-1"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={loading || !newGroupName}
-                  className="flex-1 py-2 px-4 bg-foreground text-background rounded-lg hover:opacity-90 disabled:opacity-50"
+                  loading={loading}
+                  className="flex-1"
                 >
                   Create
-                </button>
+                </Button>
               </div>
             </form>
           </div>
         </div>
       )}
 
+      {/* Delete Confirm Modal */}
       {deleteConfirmGroupId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-background border border-gray-200 dark:border-gray-800 rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-background border border-gray-200 dark:border-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md">
             <h2 className="text-xl font-semibold mb-4 text-red-600">Delete Group</h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Are you sure you want to delete this group? This action cannot be undone
               and will permanently delete all photos and videos in this group.
             </p>
             <div className="flex gap-3">
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={() => setDeleteConfirmGroupId(null)}
                 disabled={isDeleting}
-                className="flex-1 py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50"
+                className="flex-1"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="danger"
                 onClick={handleDeleteGroup}
                 disabled={isDeleting}
-                className="flex-1 py-2 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                loading={isDeleting}
+                className="flex-1"
               >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </button>
+                Delete
+              </Button>
             </div>
           </div>
         </div>

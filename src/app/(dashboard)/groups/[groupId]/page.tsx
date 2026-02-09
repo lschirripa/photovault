@@ -76,7 +76,7 @@ function UploadRow({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-lg ${
+      className={`relative overflow-hidden rounded-xl ${
         isError ? "bg-red-50 dark:bg-red-900/20" : "bg-gray-50 dark:bg-gray-900"
       }`}
     >
@@ -591,7 +591,7 @@ export default function GroupDetailPage() {
         </Link>
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl font-bold">{group.name}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{group.name}</h1>
             {group.description && (
               <p className="text-gray-600 dark:text-gray-400 mt-1">
                 {group.description}
@@ -609,7 +609,7 @@ export default function GroupDetailPage() {
                 Select
               </Button>
             )}
-            <label className="relative px-4 py-2 bg-foreground text-background rounded-lg hover:opacity-90 cursor-pointer text-sm font-medium overflow-hidden">
+            <label className="relative px-4 py-2 bg-foreground text-background rounded-lg shadow-sm hover:shadow-md hover:brightness-90 cursor-pointer text-sm font-medium overflow-hidden transition-all duration-200">
               Upload
               <input
                 type="file"
@@ -626,7 +626,7 @@ export default function GroupDetailPage() {
       {/* Albums Section */}
       <section className="mb-8">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Albums</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Albums</h2>
           <Button variant="outline" size="sm" onClick={() => setShowAlbumForm(true)}>
             New Album
           </Button>
@@ -636,7 +636,7 @@ export default function GroupDetailPage() {
             No albums yet. Create one to organize your photos.
           </p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-3">
             {albums.map((album) => (
               <AlbumCard
                 key={album.id}
@@ -657,7 +657,7 @@ export default function GroupDetailPage() {
       {/* People Section */}
       {persons.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">People</h2>
+          <h2 className="text-lg font-semibold tracking-tight mb-4">People</h2>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
             {persons.map((person) => (
               <PersonCard
@@ -682,7 +682,7 @@ export default function GroupDetailPage() {
 
       {/* Photos Section */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">All Photos</h2>
+        <h2 className="text-lg font-semibold tracking-tight mb-4">All Photos</h2>
 
         <MediaFilterBar
           filters={filters}
@@ -791,7 +791,7 @@ export default function GroupDetailPage() {
 
       {/* Selection Toolbar - Extended with Add to Album */}
       {selectionMode && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-lg animate-in slide-in-from-bottom duration-200">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 shadow-lg animate-in slide-in-from-bottom duration-200 pb-[env(safe-area-inset-bottom)]">
           <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <span className="text-sm font-medium">{selectedCount} selected</span>

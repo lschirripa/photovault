@@ -2,7 +2,8 @@
 
 import { useCallback, useState } from "react";
 import { createClient } from "@/infrastructure/supabase/browser";
-import type { Group } from "@/domain/entities/group";
+import type { GroupWithStats } from "@/domain/entities/group";
+import { MemberRole } from "@/domain/enums/member-role";
 import type { Tables } from "@/types/supabase";
 
 interface CreateGroupInput {
@@ -10,8 +11,11 @@ interface CreateGroupInput {
   description?: string;
 }
 
+type GroupMemberRow = Tables<"group_members">;
+type MediaAssetRow = Pick<Tables<"media_assets">, "id" | "group_id" | "created_at">;
+
 export function useGroups() {
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [groups, setGroups] = useState<GroupWithStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
@@ -21,30 +25,113 @@ export function useGroups() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = (await supabase
-        .from("groups")
-        .select(
-          `
-          *,
-          group_members!inner(user_id)
-        `
-        )
-        .order("created_at", { ascending: false })) as unknown as { data: Tables<"groups">[] | null; error: Error | null };
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Not authenticated");
 
-      if (fetchError) throw fetchError;
+      // 1. Fetch groups the user belongs to, with their role
+      const { data: memberRows, error: memberError } = (await supabase
+        .from("group_members")
+        .select(`
+          role,
+          groups!inner(*)
+        `)
+        .eq("user_id", authUser.id)) as unknown as {
+        data: (GroupMemberRow & { groups: Tables<"groups"> })[] | null;
+        error: Error | null;
+      };
 
-      const mappedGroups: Group[] = (data ?? []).map((g) => ({
-        id: g.id,
-        name: g.name,
-        description: g.description,
-        coverImageUrl: g.cover_image_url,
-        createdBy: g.created_by,
-        createdAt: new Date(g.created_at),
-        updatedAt: new Date(g.updated_at),
-      }));
+      if (memberError) throw memberError;
+      if (!memberRows || memberRows.length === 0) {
+        setGroups([]);
+        return [];
+      }
 
-      setGroups(mappedGroups);
-      return mappedGroups;
+      const groupIds = memberRows.map((r) => r.groups.id);
+      const roleByGroupId = new Map<string, MemberRole>();
+      for (const r of memberRows) {
+        roleByGroupId.set(r.groups.id, r.role as MemberRole);
+      }
+
+      // 2. Fetch all member counts for these groups
+      const { data: allMembers, error: membersError } = (await supabase
+        .from("group_members")
+        .select("group_id")
+        .in("group_id", groupIds)) as unknown as {
+        data: { group_id: string }[] | null;
+        error: Error | null;
+      };
+
+      if (membersError) throw membersError;
+
+      const memberCountMap = new Map<string, number>();
+      for (const m of allMembers ?? []) {
+        memberCountMap.set(m.group_id, (memberCountMap.get(m.group_id) ?? 0) + 1);
+      }
+
+      // 3. Fetch recent media for these groups (for counts + recent IDs)
+      const { data: mediaRows, error: mediaError } = (await supabase
+        .from("media_assets")
+        .select("id, group_id, created_at")
+        .in("group_id", groupIds)
+        .eq("status", "ready")
+        .order("created_at", { ascending: false })
+        .limit(1000)) as unknown as {
+        data: MediaAssetRow[] | null;
+        error: Error | null;
+      };
+
+      if (mediaError) throw mediaError;
+
+      const mediaCountMap = new Map<string, number>();
+      const lastActivityMap = new Map<string, Date>();
+      const recentMediaMap = new Map<string, string[]>();
+
+      for (const m of mediaRows ?? []) {
+        mediaCountMap.set(m.group_id, (mediaCountMap.get(m.group_id) ?? 0) + 1);
+
+        const createdAt = new Date(m.created_at);
+        if (!lastActivityMap.has(m.group_id) || createdAt > lastActivityMap.get(m.group_id)!) {
+          lastActivityMap.set(m.group_id, createdAt);
+        }
+
+        const recent = recentMediaMap.get(m.group_id) ?? [];
+        if (recent.length < 4) {
+          recent.push(m.id);
+          recentMediaMap.set(m.group_id, recent);
+        }
+      }
+
+      // Build GroupWithStats array
+      const result: GroupWithStats[] = memberRows.map((r) => {
+        const g = r.groups;
+        return {
+          id: g.id,
+          name: g.name,
+          description: g.description,
+          coverImageUrl: g.cover_image_url,
+          createdBy: g.created_by,
+          createdAt: new Date(g.created_at),
+          updatedAt: new Date(g.updated_at),
+          memberCount: memberCountMap.get(g.id) ?? 0,
+          mediaCount: mediaCountMap.get(g.id) ?? 0,
+          userRole: roleByGroupId.get(g.id) ?? MemberRole.MEMBER,
+          lastActivityAt: lastActivityMap.get(g.id) ?? null,
+          recentMediaIds: recentMediaMap.get(g.id) ?? [],
+        };
+      });
+
+      // Sort by last activity (most active first), then created_at desc
+      result.sort((a, b) => {
+        const aTime = a.lastActivityAt?.getTime() ?? 0;
+        const bTime = b.lastActivityAt?.getTime() ?? 0;
+        if (aTime !== bTime) return bTime - aTime;
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      });
+
+      setGroups(result);
+      return result;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to fetch groups";
@@ -88,7 +175,7 @@ export function useGroups() {
 
         if (memberError) throw memberError;
 
-        const newGroup: Group = {
+        const newGroup: GroupWithStats = {
           id: data.id,
           name: data.name,
           description: data.description,
@@ -96,6 +183,11 @@ export function useGroups() {
           createdBy: data.created_by,
           createdAt: new Date(data.created_at),
           updatedAt: new Date(data.updated_at),
+          memberCount: 1,
+          mediaCount: 0,
+          userRole: MemberRole.OWNER,
+          lastActivityAt: null,
+          recentMediaIds: [],
         };
 
         setGroups((prev) => [newGroup, ...prev]);

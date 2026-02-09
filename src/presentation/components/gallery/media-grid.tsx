@@ -26,7 +26,9 @@ function getColumnCount(width: number): number {
   return 2;
 }
 
-const GAP = 8; // gap-2 = 0.5rem = 8px
+function getGap(width: number): number {
+  return width < 768 ? 12 : 8;
+}
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -47,8 +49,9 @@ export function MediaGrid({
 }: MediaGridProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(2);
+  const [gap, setGap] = useState(12);
 
-  // Track container width for column count
+  // Track container width for column count and responsive gap
   useEffect(() => {
     const el = parentRef.current;
     if (!el) return;
@@ -56,27 +59,34 @@ export function MediaGrid({
     const observer = new ResizeObserver((entries) => {
       const width = entries[0].contentRect.width;
       setColumns(getColumnCount(width));
+      setGap(getGap(width));
     });
     observer.observe(el);
     // Set initial value
     setColumns(getColumnCount(el.clientWidth));
+    setGap(getGap(el.clientWidth));
     return () => observer.disconnect();
   }, []);
 
   const rowCount = Math.ceil(media.length / columns);
-  // Each row: square cell + gap. Cell size = (containerWidth - gaps) / columns
-  // We approximate row height as containerWidth / columns (square) + gap
+  // Each row is a square cell: height = (containerWidth - gaps) / columns
   const estimateSize = useCallback(() => {
     const width = parentRef.current?.clientWidth ?? 300;
-    return Math.floor((width - GAP * (columns - 1)) / columns) + GAP;
-  }, [columns]);
+    return Math.floor((width - gap * (columns - 1)) / columns);
+  }, [columns, gap]);
 
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
     estimateSize,
+    gap,
     overscan: 3,
   });
+
+  // Invalidate virtualizer cache when layout changes
+  useEffect(() => {
+    virtualizer.measure();
+  }, [columns, gap, virtualizer]);
 
   return (
     <div
@@ -95,11 +105,12 @@ export function MediaGrid({
           return (
             <div
               key={virtualRow.key}
-              className="absolute left-0 right-0 grid gap-2"
+              className="absolute left-0 right-0 grid"
               style={{
                 top: virtualRow.start,
                 height: virtualRow.size,
                 gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                gap: `${gap}px`,
               }}
             >
               {rowItems.map((item, colIdx) => {
@@ -112,9 +123,8 @@ export function MediaGrid({
                   <div
                     key={item.id}
                     className={cn(
-                      "aspect-square bg-gray-100 dark:bg-gray-900 rounded-lg overflow-hidden relative group cursor-pointer",
-                      isSelected &&
-                        "ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-950"
+                      "aspect-square bg-gray-100 dark:bg-gray-900 rounded-xl overflow-hidden relative group cursor-pointer transition-shadow duration-200 hover:shadow-lg",
+                      isSelected && "ring-2 ring-inset ring-blue-500"
                     )}
                     onClick={() => {
                       if (selectionMode) {
@@ -140,7 +150,7 @@ export function MediaGrid({
                             alt={item.filename}
                             fill
                             unoptimized
-                            className="object-cover"
+                            className="object-cover animate-fade-in"
                             sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
                           />
                         )}

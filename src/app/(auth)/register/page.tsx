@@ -53,9 +53,9 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
+      <div className="max-w-md w-full space-y-8 rounded-2xl border border-gray-200/60 dark:border-gray-800/60 shadow-lg p-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold">Create your account</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Create your account</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             Start sharing photos with your groups
           </p>
@@ -84,7 +84,7 @@ export default function RegisterPage() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors hover:border-gray-400 dark:hover:border-gray-500"
             />
           </div>
 
@@ -98,7 +98,7 @@ export default function RegisterPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors hover:border-gray-400 dark:hover:border-gray-500"
             />
           </div>
 
@@ -113,7 +113,7 @@ export default function RegisterPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors hover:border-gray-400 dark:hover:border-gray-500"
             />
             <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
           </div>
@@ -121,7 +121,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 px-4 bg-foreground text-background rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+            className="w-full py-2 px-4 bg-foreground text-background rounded-lg hover:brightness-90 disabled:opacity-50 transition-all duration-200"
           >
             {loading ? "Creating account..." : "Create account"}
           </button>
@@ -140,14 +140,14 @@ export default function RegisterPage() {
           <button
             onClick={() => handleOAuth("google")}
             disabled={loading}
-            className="py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-colors"
+            className="py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-all duration-200 hover:shadow-sm"
           >
             Google
           </button>
           <button
             onClick={() => handleOAuth("github")}
             disabled={loading}
-            className="py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-colors"
+            className="py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-all duration-200 hover:shadow-sm"
           >
             GitHub
           </button>

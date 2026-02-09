@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/presentation/providers/auth-provider";
+import { ActivityDropdown } from "@/presentation/components/groups/activity-dropdown";
 
 export default function DashboardLayout({
   children,
@@ -40,7 +41,7 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen">
-      <nav className="border-b border-gray-200 dark:border-gray-800">
+      <nav className="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14 items-center">
             <div className="flex items-center gap-6">
@@ -58,6 +59,7 @@ export default function DashboardLayout({
               <span className="text-sm text-gray-600 dark:text-gray-400">
                 {user.email}
               </span>
+              <ActivityDropdown />
               <Link
                 href="/settings"
                 className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-foreground hover:bg-gray-50 dark:hover:bg-gray-900 rounded-lg transition-colors"

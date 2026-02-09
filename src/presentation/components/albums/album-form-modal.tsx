@@ -74,10 +74,10 @@ export function AlbumFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full mx-4 p-6 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full mx-4 p-6 border border-gray-200/80 dark:border-gray-800/80 animate-in fade-in zoom-in-95 duration-200">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           {isEditing ? "Edit Album" : "Create Album"}
         </h2>
@@ -97,7 +97,7 @@ export function AlbumFormModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Album name"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                 disabled={loading}
                 autoFocus
               />
@@ -116,7 +116,7 @@ export function AlbumFormModal({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Add a description..."
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none transition-colors"
                 disabled={loading}
               />
             </div>

@@ -70,9 +70,9 @@ export default function SignInPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
+      <div className="max-w-md w-full space-y-8 rounded-2xl border border-gray-200/60 dark:border-gray-800/60 shadow-lg p-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold">Welcome back</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             Sign in to your PhotoVault account
           </p>
@@ -101,7 +101,7 @@ export default function SignInPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors hover:border-gray-400 dark:hover:border-gray-500"
             />
           </div>
 
@@ -115,14 +115,14 @@ export default function SignInPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors hover:border-gray-400 dark:hover:border-gray-500"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 px-4 bg-foreground text-background rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+            className="w-full py-2 px-4 bg-foreground text-background rounded-lg hover:brightness-90 disabled:opacity-50 transition-all duration-200"
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
@@ -141,14 +141,14 @@ export default function SignInPage() {
           <button
             onClick={() => handleOAuth("google")}
             disabled={loading}
-            className="py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-colors"
+            className="py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-all duration-200 hover:shadow-sm"
           >
             Google
           </button>
           <button
             onClick={() => handleOAuth("github")}
             disabled={loading}
-            className="py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-colors"
+            className="py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-all duration-200 hover:shadow-sm"
           >
             GitHub
           </button>
@@ -157,7 +157,7 @@ export default function SignInPage() {
         <button
           onClick={handleMagicLink}
           disabled={loading || !email}
-          className="w-full py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-colors text-sm"
+          className="w-full py-2 px-4 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 disabled:opacity-50 transition-all duration-200 hover:shadow-sm text-sm"
         >
           Send magic link
         </button>

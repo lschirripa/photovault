@@ -71,10 +71,10 @@ export function AddToAlbumModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full mx-4 p-6 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full mx-4 p-6 border border-gray-200/80 dark:border-gray-800/80 animate-in fade-in zoom-in-95 duration-200">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
           Add to Album
         </h2>

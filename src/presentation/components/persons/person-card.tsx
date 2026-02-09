@@ -60,7 +60,7 @@ export function PersonCard({ person, groupId, onRename, onDismiss, selected, onT
   );
 
   return (
-    <div className="group relative text-center">
+    <div className="group relative text-center transition-transform duration-200 hover:-translate-y-1">
       {onToggleSelect ? (
         <button
           onClick={() => onToggleSelect(person.id)}
