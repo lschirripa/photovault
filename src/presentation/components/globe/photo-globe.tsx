@@ -2,10 +2,8 @@
 
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import R3fGlobe from "r3f-globe";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import Globe from "react-globe.gl";
+import type { GlobeMethods } from "react-globe.gl";
 import { useGeoMedia } from "@/presentation/hooks/use-geo-media";
 import { useUrlCache } from "@/presentation/hooks/use-url-cache";
 import {
@@ -19,25 +17,28 @@ const GLOBE_IMAGE_URL =
 const BUMP_IMAGE_URL =
   "//cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png";
 
+const NAV_HEIGHT = 56;
+
 export default function PhotoGlobe() {
-  const controlsRef = useRef<OrbitControlsImpl>(null);
+  const globeEl = useRef<GlobeMethods | undefined>(undefined);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
   const router = useRouter();
   const { points, loading } = useGeoMedia();
   const { fetchUrls } = useUrlCache();
   const [clusterData, setClusterData] = useState<ClusterMarkerData[]>([]);
   const [globeReady, setGlobeReady] = useState(false);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   const handleNavigate = useCallback(
     (path: string) => {
       router.push(path);
     },
-    [router]
+    [router],
   );
 
   const clusters = useMemo(
     () => (points.length > 0 ? clusterPoints(points, 50) : []),
-    [points]
+    [points],
   );
 
   // Build deduplicated labels from cluster location data
@@ -46,13 +47,10 @@ export default function PhotoGlobe() {
 
     const rawLabels: Array<{ lat: number; lng: number; text: string }> = [];
     for (const cluster of clusters) {
-      // Pick the best label: prefer city, fallback to country
       const firstWithCity = cluster.points.find((p) => p.locationCity);
       const firstWithCountry = cluster.points.find((p) => p.locationCountry);
       const text =
-        firstWithCity?.locationCity ??
-        firstWithCountry?.locationCountry ??
-        "";
+        firstWithCity?.locationCity ?? firstWithCountry?.locationCountry ?? "";
       if (!text) continue;
       rawLabels.push({
         lat: cluster.center.lat,
@@ -61,18 +59,13 @@ export default function PhotoGlobe() {
       });
     }
 
-    // Deduplicate labels: skip if same text and within 100km of an existing label
     const deduped: typeof rawLabels = [];
     for (const label of rawLabels) {
       const duplicate = deduped.some(
         (existing) =>
           existing.text === label.text &&
-          haversineDistance(
-            existing.lat,
-            existing.lng,
-            label.lat,
-            label.lng
-          ) < 100
+          haversineDistance(existing.lat, existing.lng, label.lat, label.lng) <
+            100,
       );
       if (!duplicate) {
         deduped.push(label);
@@ -81,6 +74,19 @@ export default function PhotoGlobe() {
 
     return deduped;
   }, [clusters]);
+
+  // Measure container dimensions
+  useEffect(() => {
+    const updateDimensions = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight - NAV_HEIGHT,
+      });
+    };
+    updateDimensions();
+    window.addEventListener("resize", updateDimensions);
+    return () => window.removeEventListener("resize", updateDimensions);
+  }, []);
 
   // Fetch thumbnail URLs for all geo points, then build cluster marker data
   useEffect(() => {
@@ -95,9 +101,7 @@ export default function PhotoGlobe() {
           lat: cluster.center.lat,
           lng: cluster.center.lng,
           points: cluster.points,
-          thumbnailUrls: cluster.points
-            .map((p) => urls[p.id] ?? "")
-            .filter(Boolean),
+          thumbnailUrls: cluster.points.map((p) => urls[p.id] ?? null),
         }));
         setClusterData(data);
       })
@@ -110,34 +114,47 @@ export default function PhotoGlobe() {
     };
   }, [points, clusters, fetchUrls]);
 
-  // Cleanup idle timer on unmount
+  // Configure globe controls after mount
   useEffect(() => {
-    return () => {
+    if (!globeEl.current) return;
+    const controls = globeEl.current.controls();
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+    controls.enablePan = false;
+    controls.minDistance = 120;
+    controls.maxDistance = 800;
+
+    // Set initial point of view
+    globeEl.current.pointOfView({ altitude: 2.5 });
+
+    // Auto-rotation pause on interaction
+    const handleStart = () => {
+      controls.autoRotate = false;
       if (idleTimerRef.current) {
         clearTimeout(idleTimerRef.current);
       }
     };
-  }, []);
 
-  const handleInteractionStart = useCallback(() => {
-    if (controlsRef.current) {
-      controlsRef.current.autoRotate = false;
-    }
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-    }
-  }, []);
-
-  const handleInteractionEnd = useCallback(() => {
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-    }
-    idleTimerRef.current = setTimeout(() => {
-      if (controlsRef.current) {
-        controlsRef.current.autoRotate = true;
+    const handleEnd = () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
       }
-    }, 3000);
-  }, []);
+      idleTimerRef.current = setTimeout(() => {
+        controls.autoRotate = true;
+      }, 3000);
+    };
+
+    controls.addEventListener("start", handleStart);
+    controls.addEventListener("end", handleEnd);
+
+    return () => {
+      controls.removeEventListener("start", handleStart);
+      controls.removeEventListener("end", handleEnd);
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+      }
+    };
+  }, [globeReady]);
 
   const handleGlobeReady = useCallback(() => {
     setGlobeReady(true);
@@ -159,53 +176,35 @@ export default function PhotoGlobe() {
         transition: "opacity 500ms ease-in",
       }}
     >
-      <Canvas
-        flat
-        camera={{ fov: 50, position: [0, 0, 350] }}
-        style={{ background: "#0a0a0a" }}
-      >
-        <ambientLight color={0xcccccc} intensity={Math.PI} />
-        <directionalLight intensity={0.6 * Math.PI} />
-        <OrbitControls
-          ref={controlsRef}
-          autoRotate
-          autoRotateSpeed={0.5}
-          enablePan={false}
-          minDistance={120}
-          maxDistance={800}
-          dampingFactor={0.1}
-          zoomSpeed={0.3}
-          rotateSpeed={0.3}
-          onStart={handleInteractionStart}
-          onEnd={handleInteractionEnd}
-        />
-        <R3fGlobe
-          globeImageUrl={GLOBE_IMAGE_URL}
-          bumpImageUrl={BUMP_IMAGE_URL}
-          showAtmosphere
-          atmosphereColor="lightskyblue"
-          atmosphereAltitude={0.2}
-          onGlobeReady={handleGlobeReady}
-          htmlElementsData={clusterData}
-          htmlLat="lat"
-          htmlLng="lng"
-          htmlAltitude={0.01}
-          htmlElement={(d: object) =>
-            createMarkerElement(d as ClusterMarkerData, handleNavigate)
-          }
-          htmlTransitionDuration={500}
-          labelsData={labelsData}
-          labelLat="lat"
-          labelLng="lng"
-          labelText="text"
-          labelColor={() => "rgba(255,255,255,0.6)"}
-          labelSize={0.4}
-          labelAltitude={0.015}
-          labelDotRadius={0}
-          labelIncludeDot={false}
-          labelsTransitionDuration={500}
-        />
-      </Canvas>
+      <Globe
+        ref={globeEl}
+        width={dimensions.width}
+        height={dimensions.height}
+        globeImageUrl={GLOBE_IMAGE_URL}
+        bumpImageUrl={BUMP_IMAGE_URL}
+        showAtmosphere={true}
+        atmosphereColor="lightskyblue"
+        atmosphereAltitude={0.2}
+        backgroundColor="#0a0a0a"
+        onGlobeReady={handleGlobeReady}
+        htmlElementsData={clusterData}
+        htmlLat="lat"
+        htmlLng="lng"
+        htmlAltitude={0.01}
+        htmlElement={(d: object) =>
+          createMarkerElement(d as ClusterMarkerData, handleNavigate)
+        }
+        htmlTransitionDuration={500}
+        labelsData={labelsData}
+        labelLat="lat"
+        labelLng="lng"
+        labelText="text"
+        labelColor={() => "rgba(255,255,255,0.6)"}
+        labelSize={0.4}
+        labelAltitude={0.015}
+        labelDotRadius={0}
+        labelsTransitionDuration={500}
+      />
     </div>
   );
 }
