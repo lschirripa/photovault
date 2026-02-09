@@ -321,7 +321,7 @@ export function ClusterPopup({
     closeButtonRef.current?.focus();
   }, []);
 
-  // Escape to close
+  // Escape to close (document-level so it works regardless of focus)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -329,6 +329,31 @@ export function ClusterPopup({
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [onClose]);
+
+  /** Keyboard navigation on the carousel container */
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const ci = Math.round(currentIndex.current);
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          snapToIndex(ci - 1, 0.4);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          snapToIndex(ci + 1, 0.4);
+          break;
+        case "Enter":
+        case " ": {
+          e.preventDefault();
+          const group = groups[wrapIndex(ci, groupCount)];
+          onNavigate(`/groups/${group.groupId}`);
+          break;
+        }
+      }
+    },
+    [snapToIndex, groups, groupCount, onNavigate],
+  );
 
   if (groupCount === 0) return null;
 
@@ -366,6 +391,7 @@ export function ClusterPopup({
         tabIndex={0}
         className="relative overflow-hidden pb-12 pt-10 w-full h-[320px] cursor-grab active:cursor-grabbing touch-none"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
