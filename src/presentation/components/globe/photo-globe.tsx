@@ -11,7 +11,7 @@ import {
   createMarkerElement,
   type ClusterMarkerData,
 } from "./create-marker-element";
-import { clusterPoints } from "./geo-utils";
+import { clusterPoints, haversineDistance } from "./geo-utils";
 
 const GLOBE_IMAGE_URL =
   "//cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg";
@@ -29,6 +29,48 @@ export default function PhotoGlobe() {
     () => (points.length > 0 ? clusterPoints(points, 50) : []),
     [points]
   );
+
+  // Build deduplicated labels from cluster location data
+  const labelsData = useMemo(() => {
+    if (clusters.length === 0) return [];
+
+    const rawLabels: Array<{ lat: number; lng: number; text: string }> = [];
+    for (const cluster of clusters) {
+      // Pick the best label: prefer city, fallback to country
+      const firstWithCity = cluster.points.find((p) => p.locationCity);
+      const firstWithCountry = cluster.points.find((p) => p.locationCountry);
+      const text =
+        firstWithCity?.locationCity ??
+        firstWithCountry?.locationCountry ??
+        "";
+      if (!text) continue;
+      rawLabels.push({
+        lat: cluster.center.lat,
+        lng: cluster.center.lng,
+        text,
+      });
+    }
+
+    // Deduplicate labels: skip if same text and within 100km of an existing label
+    const deduped: typeof rawLabels = [];
+    for (const label of rawLabels) {
+      const duplicate = deduped.some(
+        (existing) =>
+          existing.text === label.text &&
+          haversineDistance(
+            existing.lat,
+            existing.lng,
+            label.lat,
+            label.lng
+          ) < 100
+      );
+      if (!duplicate) {
+        deduped.push(label);
+      }
+    }
+
+    return deduped;
+  }, [clusters]);
 
   // Fetch thumbnail URLs for all geo points, then build cluster marker data
   useEffect(() => {
@@ -112,6 +154,16 @@ export default function PhotoGlobe() {
             createMarkerElement(d as ClusterMarkerData)
           }
           htmlTransitionDuration={500}
+          labelsData={labelsData}
+          labelLat="lat"
+          labelLng="lng"
+          labelText="text"
+          labelColor={() => "rgba(255,255,255,0.6)"}
+          labelSize={0.4}
+          labelAltitude={0.015}
+          labelDotRadius={0}
+          labelIncludeDot={false}
+          labelsTransitionDuration={500}
         />
       </Canvas>
     </div>
