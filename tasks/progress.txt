@@ -15,6 +15,7 @@ Started: lunes,  9 de febrero de 2026, 20:02:42 -03
 - Velocity tracking: store last 5 `{x, t}` samples; compute velocity as `-dx / CARD_STEP / dt` (cards/second)
 - `dragDistance` ref tracks pixel displacement for click vs drag threshold (5px)
 - `touch-none` CSS class on container prevents browser touch scroll interference
+- Two-tap pattern: `handleCardClick(slot)` checks `dragDistance > 5` then `logicalIndex === Math.round(currentIndex)` to decide snap vs navigate
 
 ---
 
@@ -48,4 +49,17 @@ Started: lunes,  9 de febrero de 2026, 20:02:42 -03
   - `setPointerCapture` ensures move/up events fire even if pointer leaves the element
   - `onPointerCancel` should mirror `onPointerUp` to handle interrupted gestures
   - `snapToIndex` updates `renderIndex` both during tween (via `onUpdate`) and on complete — the onComplete sets the exact integer to avoid float drift
+---
+
+## 2026-02-09 - US-003
+- Implemented two-tap card interaction: tap non-centered card to snap to center, tap centered card to navigate
+- Added `handleCardClick(slot)` callback that uses `dragDistance.current > 5` threshold to suppress clicks during drag
+- Computes logical index from slot + renderIndex, compares to `Math.round(currentIndex.current)` to determine if centered
+- If centered → calls `onNavigate('/groups/${groupId}')`. If not centered → calls `snapToIndex(logicalIndex, 0.5)`
+- View profile button continues to work via `stopPropagation` + `pointer-events-auto` (unchanged from US-001)
+- Files changed: `src/presentation/components/globe/cluster-popup.tsx`
+- **Learnings for future iterations:**
+  - The slot-to-logical-index mapping is `renderIndex + (slot - HALF_SLOTS)` — same formula used in `getSlotGroup`
+  - `dragDistance` ref from US-002 is the key bridge between drag and click behavior
+  - The 5px threshold effectively prevents accidental navigation during micro-drags
 ---

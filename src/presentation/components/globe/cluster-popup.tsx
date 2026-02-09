@@ -264,6 +264,27 @@ export function ClusterPopup({
     [snapToIndex],
   );
 
+  /** Handle card click: if drag occurred, ignore. If centered, navigate. Otherwise snap to card. */
+  const handleCardClick = useCallback(
+    (slot: number) => {
+      // Suppress click if user was dragging (> 5px threshold)
+      if (dragDistance.current > 5) return;
+
+      const logicalIndex = renderIndex + (slot - HALF_SLOTS);
+      const centeredIndex = Math.round(currentIndex.current);
+
+      if (logicalIndex === centeredIndex) {
+        // Already centered — navigate to group
+        const group = groups[wrapIndex(logicalIndex, groupCount)];
+        onNavigate(`/groups/${group.groupId}`);
+      } else {
+        // Not centered — snap to this card
+        snapToIndex(logicalIndex, 0.5);
+      }
+    },
+    [renderIndex, groupCount, groups, onNavigate, snapToIndex],
+  );
+
   /** Get the group for a given slot based on renderIndex */
   const getSlotGroup = useCallback(
     (slot: number): GroupData => {
@@ -364,9 +385,7 @@ export function ClusterPopup({
               <GroupCard
                 group={group}
                 onNavigate={onNavigate}
-                onClick={() => {
-                  // Click-to-center and navigate handled in US-003
-                }}
+                onClick={() => handleCardClick(slot)}
               />
             </div>
           );

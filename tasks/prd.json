@@ -67,7 +67,7 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-001 (positioning) and US-002 (drag threshold). The click handler receives the card's logical index. Compare Math.round(currentIndex.current) === cardLogicalIndex to determine if it's centered. If not centered → tween to it. If centered → navigate."
     },
     {
