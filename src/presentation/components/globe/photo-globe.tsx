@@ -24,6 +24,7 @@ export default function PhotoGlobe() {
   const { points, loading } = useGeoMedia();
   const { fetchUrls } = useUrlCache();
   const [clusterData, setClusterData] = useState<ClusterMarkerData[]>([]);
+  const [globeReady, setGlobeReady] = useState(false);
 
   const clusters = useMemo(
     () => (points.length > 0 ? clusterPoints(points, 50) : []),
@@ -110,6 +111,10 @@ export default function PhotoGlobe() {
     }, 3000);
   }, []);
 
+  const handleGlobeReady = useCallback(() => {
+    setGlobeReady(true);
+  }, []);
+
   if (!loading && points.length === 0) {
     return (
       <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -119,7 +124,13 @@ export default function PhotoGlobe() {
   }
 
   return (
-    <div className="w-full h-full">
+    <div
+      className="w-full h-full"
+      style={{
+        opacity: globeReady ? 1 : 0,
+        transition: "opacity 500ms ease-in",
+      }}
+    >
       <Canvas
         flat
         camera={{ fov: 50, position: [0, 0, 350] }}
@@ -146,6 +157,7 @@ export default function PhotoGlobe() {
           showAtmosphere
           atmosphereColor="lightskyblue"
           atmosphereAltitude={0.2}
+          onGlobeReady={handleGlobeReady}
           htmlElementsData={clusterData}
           htmlLat="lat"
           htmlLng="lng"
