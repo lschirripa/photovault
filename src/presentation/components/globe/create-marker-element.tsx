@@ -55,6 +55,7 @@ function createThumbnailCircle(
     const img = document.createElement("img");
     img.src = url;
     img.alt = "";
+    img.setAttribute("loading", "lazy");
     img.style.cssText = `
       width: 100%;
       height: 100%;
