@@ -144,7 +144,7 @@ export default function AlbumDetailPage() {
     }
   }, [user, albumId, fetchAlbumInfo]);
 
-  // Fetch thumbnail URLs in batch (cache handles dedup/TTL)
+  // Fetch thumbnail URLs in batches of 20 (cache handles dedup/TTL)
   useEffect(() => {
     const readyIds = media
       .filter((m) => m.status === "ready")
@@ -152,15 +152,31 @@ export default function AlbumDetailPage() {
 
     if (readyIds.length === 0) return;
 
-    fetchBatchUrls(readyIds, "thumbnail").then((urls) => {
-      setMediaUrls((prev) => {
-        const next = new Map(prev);
-        for (const [id, url] of Object.entries(urls)) {
-          next.set(id, url);
+    let cancelled = false;
+    const BATCH_SIZE = 20;
+
+    const fetchInBatches = async () => {
+      for (let i = 0; i < readyIds.length; i += BATCH_SIZE) {
+        if (cancelled) return;
+        const chunk = readyIds.slice(i, i + BATCH_SIZE);
+        const urls = await fetchBatchUrls(chunk, "thumbnail");
+        if (cancelled) return;
+        setMediaUrls((prev) => {
+          const next = new Map(prev);
+          for (const [id, url] of Object.entries(urls)) {
+            next.set(id, url);
+          }
+          return next;
+        });
+        // Yield to main thread between batches (skip for first batch)
+        if (i + BATCH_SIZE < readyIds.length) {
+          await new Promise((r) => requestAnimationFrame(r));
         }
-        return next;
-      });
-    });
+      }
+    };
+
+    fetchInBatches();
+    return () => { cancelled = true; };
   }, [media, fetchBatchUrls]);
 
   useEffect(() => {

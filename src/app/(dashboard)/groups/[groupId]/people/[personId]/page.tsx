@@ -62,11 +62,19 @@ export default function PersonDetailPage() {
         setHasMore(data.hasMore);
         setCursor(data.nextCursor);
 
-        // Fetch thumbnail URLs
+        // Fetch thumbnail URLs in batches of 20
         const assetIds = newAssets.map((a) => a.id);
         if (assetIds.length > 0) {
-          const urls = await fetchUrls(assetIds, "thumbnail");
-          setThumbnailUrls((prev) => ({ ...prev, ...urls }));
+          const BATCH_SIZE = 20;
+          for (let i = 0; i < assetIds.length; i += BATCH_SIZE) {
+            const chunk = assetIds.slice(i, i + BATCH_SIZE);
+            const urls = await fetchUrls(chunk, "thumbnail");
+            setThumbnailUrls((prev) => ({ ...prev, ...urls }));
+            // Yield to main thread between batches
+            if (i + BATCH_SIZE < assetIds.length) {
+              await new Promise((r) => requestAnimationFrame(r));
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to fetch person media:", err);
