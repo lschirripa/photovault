@@ -188,66 +188,68 @@ export default function PhotoGlobe() {
         transition: "opacity 500ms ease-in",
       }}
     >
-      {dimensions.width === 0 || dimensions.height === 0 ? null : <Globe
-        ref={globeEl}
-        width={dimensions.width}
-        height={dimensions.height}
-        globeImageUrl={GLOBE_IMAGE_URL}
-        bumpImageUrl={BUMP_IMAGE_URL}
-        showAtmosphere={true}
-        atmosphereColor="lightskyblue"
-        atmosphereAltitude={0.2}
-        backgroundColor="#0a0a0a"
-        onGlobeReady={handleGlobeReady}
-        htmlElementsData={clusterData}
-        htmlLat="lat"
-        htmlLng="lng"
-        htmlAltitude={0.01}
-        htmlElement={(d: object) =>
-          createMarkerElement(
-            d as GlobeElementData,
-            handleNavigate,
-            (markerData: ClusterMarkerData) => {
-              const groupsMap = new Map<
-                string,
-                {
-                  groupId: string;
-                  groupName: string;
-                  locationCity?: string;
-                  locationCountry?: string;
-                  thumbnailUrl?: string | null;
-                  pointCount: number;
-                }
-              >();
+      {dimensions.width === 0 || dimensions.height === 0 ? null : (
+        <Globe
+          ref={globeEl}
+          width={dimensions.width}
+          height={dimensions.height}
+          globeImageUrl={GLOBE_IMAGE_URL}
+          bumpImageUrl={BUMP_IMAGE_URL}
+          showAtmosphere={true}
+          atmosphereColor="lightskyblue"
+          atmosphereAltitude={0.2}
+          backgroundColor="#0a0a0a"
+          onGlobeReady={handleGlobeReady}
+          htmlElementsData={clusterData}
+          htmlLat="lat"
+          htmlLng="lng"
+          htmlAltitude={0.01}
+          htmlElement={(d: object) =>
+            createMarkerElement(
+              d as GlobeElementData,
+              handleNavigate,
+              (markerData: ClusterMarkerData) => {
+                const groupsMap = new Map<
+                  string,
+                  {
+                    groupId: string;
+                    groupName: string;
+                    locationCity?: string;
+                    locationCountry?: string;
+                    thumbnailUrl?: string | null;
+                    pointCount: number;
+                  }
+                >();
 
-              markerData.points.forEach((p, idx) => {
-                const existing = groupsMap.get(p.groupId);
-                if (existing) {
-                  existing.pointCount++;
-                } else {
-                  groupsMap.set(p.groupId, {
-                    groupId: p.groupId,
-                    groupName: p.groupName,
-                    locationCity: p.locationCity,
-                    locationCountry: p.locationCountry,
-                    thumbnailUrl: markerData.thumbnailUrls[idx],
-                    pointCount: 1,
-                  });
-                }
-              });
+                markerData.points.forEach((p, idx) => {
+                  const existing = groupsMap.get(p.groupId);
+                  if (existing) {
+                    existing.pointCount++;
+                  } else {
+                    groupsMap.set(p.groupId, {
+                      groupId: p.groupId,
+                      groupName: p.groupName,
+                      locationCity: p.locationCity,
+                      locationCountry: p.locationCountry,
+                      thumbnailUrl: markerData.thumbnailUrls[idx],
+                      pointCount: 1,
+                    });
+                  }
+                });
 
-              const groups = Array.from(groupsMap.values());
+                const groups = Array.from(groupsMap.values());
 
-              setSelectedCluster({
-                lat: markerData.lat,
-                lng: markerData.lng,
-                groups,
-              });
-            },
-          )
-        }
-        htmlTransitionDuration={500}
-      />}
+                setSelectedCluster({
+                  lat: markerData.lat,
+                  lng: markerData.lng,
+                  groups,
+                });
+              },
+            )
+          }
+          htmlTransitionDuration={500}
+        />
+      )}
       {selectedCluster && (
         <div
           className="absolute inset-0 z-[50] flex items-center justify-center"
@@ -256,7 +258,12 @@ export default function PhotoGlobe() {
           aria-modal="true"
           aria-label="Cluster details"
         >
-          <div onClick={(e) => e.stopPropagation()}>
+          {/* Fade Masks */}
+
+          <div className="w-full" onClick={(e) => e.stopPropagation()}>
+            {/* Fade Masks */}
+            <div className="absolute left-0 inset-y-0 w-56 bg-gradient-to-r from-[#000]/100 to-transparent z-100! pointer-events-none" />
+            <div className="absolute right-0 inset-y-0 w-56 bg-gradient-to-l from-[#000]/100 to-transparent z-100! pointer-events-none" />
             <ClusterPopup
               groups={selectedCluster.groups}
               onNavigate={handleNavigate}
