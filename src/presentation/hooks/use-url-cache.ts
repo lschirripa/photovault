@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 
 const TTL_MS = 45 * 60 * 1000; // 45 minutes
+const MAX_CACHE_SIZE = 500;
 
 interface CacheEntry {
   url: string;
@@ -18,17 +19,29 @@ function cacheKey(assetId: string, type: "thumbnail" | "original"): string {
 }
 
 function getFromCache(assetId: string, type: "thumbnail" | "original"): string | undefined {
-  const entry = cache.get(cacheKey(assetId, type));
+  const key = cacheKey(assetId, type);
+  const entry = cache.get(key);
   if (!entry) return undefined;
   if (Date.now() > entry.expiresAt) {
-    cache.delete(cacheKey(assetId, type));
+    cache.delete(key);
     return undefined;
   }
+  // LRU touch: move to end of Map insertion order
+  cache.delete(key);
+  cache.set(key, entry);
   return entry.url;
 }
 
 function setInCache(assetId: string, type: "thumbnail" | "original", url: string): void {
-  cache.set(cacheKey(assetId, type), { url, expiresAt: Date.now() + TTL_MS });
+  const key = cacheKey(assetId, type);
+  // Delete first so re-insert moves to end (LRU newest position)
+  cache.delete(key);
+  // Evict oldest entry if at capacity
+  if (cache.size >= MAX_CACHE_SIZE) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, { url, expiresAt: Date.now() + TTL_MS });
 }
 
 /**
