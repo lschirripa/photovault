@@ -293,7 +293,6 @@ export function Lightbox({
               src={originalUrl}
               alt={currentMedia.filename}
               fill
-              unoptimized
               className="object-contain"
               sizes="100vw"
               priority
@@ -355,8 +354,8 @@ export function Lightbox({
                     alt={item.filename}
                     width={64}
                     height={64}
-                    unoptimized
                     className="w-full h-full object-cover"
+                    sizes="64px"
                   />
                 ) : (
                   <div className="w-full h-full bg-gray-800 flex items-center justify-center">

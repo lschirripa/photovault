@@ -1,94 +1,111 @@
 {
   "project": "PhotoVault",
-  "branchName": "ralph/photo-globe",
-  "description": "Fix globe marker rendering by switching from r3f-globe to react-globe.gl which manages CSS2DRenderer automatically",
+  "branchName": "ralph/image-loading-perf",
+  "description": "Improve image loading performance and caching — enable Next.js image optimization, add lazy loading to globe markers, add Cache-Control headers, reduce URL batch sizes, add LRU eviction to URL cache",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Install react-globe.gl",
-      "description": "As a developer, I need react-globe.gl installed so the globe component can use its built-in CSS2DRenderer for HTML marker rendering.",
+      "title": "Remove unoptimized prop from gallery Image components",
+      "description": "As a user, I want images to be served in modern formats (WebP/AVIF) and responsive sizes so pages load faster, especially on mobile.",
       "acceptanceCriteria": [
-        "Run: npm install react-globe.gl",
-        "react-globe.gl is installed successfully",
+        "Remove `unoptimized` prop from <Image> in src/presentation/components/gallery/media-grid.tsx",
+        "Remove `unoptimized` prop from <Image> in src/presentation/components/gallery/lightbox.tsx (both main image and thumbstrip)",
+        "Remove `unoptimized` prop from <Image> in src/presentation/components/albums/album-card.tsx",
+        "Remove `unoptimized` prop from <Image> in src/presentation/components/persons/person-card.tsx",
+        "Remove `unoptimized` prop from <Image> in src/presentation/components/gallery/face-tags.tsx (both inline and dropdown images)",
+        "Remove `unoptimized` prop from <Image> in src/app/(dashboard)/groups/[groupId]/people/[personId]/page.tsx",
+        "Verify next.config.ts remotePatterns already allows *.r2.dev and *.r2.cloudflarestorage.com — do NOT change if already correct",
+        "Ensure every <Image> has an appropriate `sizes` prop: gallery grid tiles should use responsive sizes like '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw'; fixed-size avatars use 'sizes=\"64px\"'; lightbox main uses 'sizes=\"100vw\"'",
+        "Lightbox main image keeps `priority` prop",
         "npm run type-check passes",
-        "npm run build succeeds",
-        "Do NOT uninstall r3f-globe or @react-three/fiber or @react-three/drei yet"
+        "npm run build succeeds"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "react-globe.gl wraps the same three-globe core as r3f-globe but manages the full rendering pipeline including CSS2DRenderer"
+      "passes": false,
+      "notes": "This is the highest-impact change. Next.js image optimizer proxies external images through /_next/image?url=...&w=...&q=75 and auto-negotiates WebP/AVIF. The remotePatterns in next.config.ts already allow *.r2.dev — no config change should be needed. Focus on getting sizes props right for each context: grid columns, lightbox fullscreen, album covers, avatar circles, face tag thumbnails. Do NOT add unoptimized back anywhere. Do NOT change the cluster-popup.tsx <Image> — it already works without unoptimized."
     },
     {
       "id": "US-002",
-      "title": "Rewrite photo-globe.tsx to use react-globe.gl Globe component",
-      "description": "As a developer, I need to replace the R3F Canvas + r3f-globe setup with react-globe.gl's standalone Globe component which handles WebGLRenderer + CSS2DRenderer internally.",
+      "title": "Add loading lazy to globe marker images",
+      "description": "As a user, I want globe marker thumbnails to load only when near the viewport so the globe page loads faster.",
       "acceptanceCriteria": [
-        "Replace R3F imports (Canvas from @react-three/fiber, OrbitControls from @react-three/drei, R3fGlobe from r3f-globe, OrbitControlsImpl from three-stdlib) with: import Globe from 'react-globe.gl' (default import)",
-        "Do NOT wrap Globe in <Canvas> — react-globe.gl creates its own canvas internally",
-        "Remove <ambientLight>, <directionalLight>, <OrbitControls> — react-globe.gl manages these",
-        "Use useRef<any>(null) for the Globe ref (globeEl)",
-        "Set Globe props: globeImageUrl, bumpImageUrl, showAtmosphere={true}, atmosphereColor='lightskyblue', atmosphereAltitude={0.2}, backgroundColor='#0a0a0a'",
-        "For sizing: measure the container div using a ref and ResizeObserver, pass width and height as number props to Globe. Or use the window inner dimensions minus nav height (56px)",
-        "After globe mounts (useEffect with globeEl.current check): set globeEl.current.controls().autoRotate = true, autoRotateSpeed = 0.5, enablePan = false, minDistance = 120, maxDistance = 800",
-        "Auto-rotation pause on interaction: globeEl.current.controls().addEventListener('start', ...) to set autoRotate=false, addEventListener('end', ...) to resume after 3s idle setTimeout",
-        "Set initial point of view: globeEl.current.pointOfView({ altitude: 2.5 }) after mount",
-        "Keep globe fade-in: opacity 0→1 container div with onGlobeReady callback setting state to true",
-        "Keep empty state: if (!loading && points.length === 0) return 'No photos with location data yet' message",
-        "CRITICAL: All hooks (useState, useRef, useCallback, useMemo, useEffect) must be declared BEFORE any early return statement",
-        "The parent page src/app/(dashboard)/map/page.tsx already uses next/dynamic with { ssr: false } — verify it still imports correctly",
+        "In src/presentation/components/globe/create-marker-element.tsx, add loading='lazy' attribute to all <img> elements created for marker thumbnails",
+        "Target the thumbnail <img> in single-marker circles and any fan-out cluster thumbnail images",
+        "Use img.setAttribute('loading', 'lazy') since these are raw DOM elements (not React JSX)",
         "npm run type-check passes",
         "npm run build succeeds"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "react-globe.gl is NOT an R3F component. It manages its own Three.js scene and renderers. Do NOT use <Canvas>. Access controls via ref: globeEl.current.controls(). The Globe component renders a canvas element directly."
+      "passes": false,
+      "notes": "These are raw DOM <img> elements created via document.createElement, not React <Image> components. Use setAttribute('loading', 'lazy'). This is natively supported in all modern browsers — no polyfill needed. The browser defers the fetch until the image is near the viewport."
     },
     {
       "id": "US-003",
-      "title": "Wire up HTML markers with htmlElementsData",
-      "description": "As a user, I want to see my photo thumbnails on the globe at their GPS coordinates, rendered as interactive HTML elements using react-globe.gl's built-in CSS2DRenderer.",
+      "title": "Add Cache-Control to geo endpoint",
+      "description": "As a developer, I want the /api/media/geo endpoint to return a Cache-Control header so the browser caches the response and avoids redundant round-trips when navigating back to the globe view.",
       "acceptanceCriteria": [
-        "Pass htmlElementsData={clusterData} to Globe component (same ClusterMarkerData[] state as before)",
-        "Pass htmlLat='lat' and htmlLng='lng' string accessors",
-        "Pass htmlAltitude={0.01}",
-        "Pass htmlElement accessor: (d) => createMarkerElement(d as ClusterMarkerData, handleNavigate) — reuse existing create-marker-element.ts",
-        "Pass htmlTransitionDuration={500}",
-        "Keep the existing useEffect that fetches thumbnail URLs via useUrlCache and builds clusterData from clusters",
-        "Keep useGeoMedia() hook for fetching geo points",
-        "Keep clusterPoints() from geo-utils.ts for clustering",
-        "CRITICAL: Markers must be VISIBLE on the globe — this is the whole point of switching to react-globe.gl",
-        "Clicking a single marker navigates to /groups/{groupId}",
-        "Hovering a cluster fans out thumbnails, clicking navigates to group",
+        "In src/app/api/media/geo/route.ts, add 'Cache-Control': 'private, max-age=60' header to the successful NextResponse.json() call",
+        "Use the same pattern as src/app/api/media/url/route.ts line 61: NextResponse.json(data, { headers: { 'Cache-Control': 'private, max-age=60' } })",
+        "Only add header to successful (200) responses, not error responses",
         "npm run type-check passes",
-        "npm run build succeeds",
-        "Verify in browser using dev-browser skill — markers must be visible on the globe"
+        "npm run build succeeds"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "react-globe.gl automatically sets up CSS2DRenderer, which is why HTML markers will now render. The htmlElement prop signature is identical: (d: object) => HTMLElement. The existing createMarkerElement function should work as-is."
+      "passes": false,
+      "notes": "Simple one-liner. The geo endpoint currently returns no Cache-Control header, so every navigation to the globe triggers a fresh DB query. max-age=60 (1 minute) keeps data fresh while preventing rapid re-fetches."
     },
     {
       "id": "US-004",
-      "title": "Wire up labels and verify full functionality",
-      "description": "As a user, I want location labels near photo clusters and full interactive globe functionality.",
+      "title": "Add Cache-Control to persons and faces endpoints",
+      "description": "As a developer, I want persons and face-related endpoints to return cache headers so face crop URLs and person lists are not re-fetched on every page visit.",
       "acceptanceCriteria": [
-        "Pass labelsData, labelLat='lat', labelLng='lng', labelText='text' to Globe",
-        "labelColor={() => 'rgba(255,255,255,0.6)'}",
-        "labelSize={0.4}, labelAltitude={0.015}, labelDotRadius={0}",
-        "labelsTransitionDuration={500}",
-        "Auto-rotation works: globe slowly spins when idle",
-        "Auto-rotation pauses on user drag/zoom, resumes after 3 seconds",
-        "Pan is disabled (enablePan = false on controls)",
-        "Globe has atmospheric glow effect",
-        "Globe fades in on initial load",
-        "Empty state shows when no geo-tagged photos exist",
+        "In src/app/api/persons/route.ts, add 'Cache-Control': 'private, max-age=60' to the successful response",
+        "In src/app/api/persons/[personId]/route.ts, add 'Cache-Control': 'private, max-age=60' to the successful response",
+        "In src/app/api/persons/[personId]/media/route.ts, add 'Cache-Control': 'private, max-age=60' to the successful response",
+        "Check if src/app/api/media/[assetId]/faces/route.ts exists — if so, add 'Cache-Control': 'private, max-age=60' to its successful response too",
+        "Only add header to successful (200) responses, not error responses",
         "npm run type-check passes",
-        "npm run build succeeds",
-        "Verify in browser using dev-browser skill"
+        "npm run build succeeds"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "react-globe.gl supports the same label props as r3f-globe since they share the three-globe core. labelIncludeDot may or may not be supported — if not, just use labelDotRadius={0}."
+      "passes": false,
+      "notes": "Same pattern as US-003. Check each file's existing NextResponse.json() call and add the headers option. Some files may already use NextResponse.json(data, { status: 200 }) — in that case merge the headers into the existing options object."
+    },
+    {
+      "id": "US-005",
+      "title": "Add LRU eviction to useUrlCache",
+      "description": "As a developer, I want the in-memory URL cache to have a maximum size with LRU eviction so it doesn't grow unboundedly for users with thousands of photos.",
+      "acceptanceCriteria": [
+        "In src/presentation/hooks/use-url-cache.ts, add a MAX_CACHE_SIZE constant set to 500",
+        "When inserting new entries, if cache.size >= MAX_CACHE_SIZE, evict the least-recently-used entry before inserting",
+        "LRU implementation: on cache read (getFromCache), delete and re-insert the key to move it to the end of the Map; on eviction, delete cache.keys().next().value (the oldest entry)",
+        "On cache write (when storing fetched URLs), also re-insert to mark as recently used",
+        "Existing TTL-based expiration (45 minutes) continues to work alongside LRU — stale entries are still evicted on access",
+        "npm run type-check passes",
+        "npm run build succeeds"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "ES2015 Maps maintain insertion order. Delete-and-reinsert on access moves an entry to 'newest' position. map.keys().next().value gives the oldest key. All O(1) operations. This story must NOT change the public API of useUrlCache — fetchUrls and fetchUrl signatures stay the same. Only internal cache management changes."
+    },
+    {
+      "id": "US-006",
+      "title": "Reduce URL batch size to 20 for progressive fetching",
+      "description": "As a user, I want the app to fetch thumbnail URLs in smaller batches as I scroll so the initial page load is faster.",
+      "acceptanceCriteria": [
+        "In src/app/(dashboard)/groups/[groupId]/page.tsx, change the thumbnail URL useEffect to fetch in batches of 20 IDs instead of all ready IDs at once",
+        "First batch of 20 is fetched immediately on load (covers above-the-fold content)",
+        "Remaining IDs are chunked into groups of 20 and fetched sequentially with a small delay or on next animation frame to avoid blocking the main thread",
+        "Apply the same batching pattern in src/app/(dashboard)/groups/[groupId]/albums/[albumId]/page.tsx",
+        "Apply the same batching pattern in src/app/(dashboard)/groups/[groupId]/people/[personId]/page.tsx",
+        "useUrlCache.fetchUrls continues to work unchanged — it already deduplicates cached vs. uncached IDs",
+        "No visual regression — images appear progressively as batches resolve, no permanent blank gaps",
+        "npm run type-check passes",
+        "npm run build succeeds"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "The simplest approach: chunk the readyIds array into slices of 20. Fetch the first slice immediately. For remaining slices, use a simple loop with await + requestAnimationFrame or setTimeout(0) between batches. Example: const BATCH_SIZE = 20; const chunks = []; for (let i = 0; i < ids.length; i += BATCH_SIZE) chunks.push(ids.slice(i, i + BATCH_SIZE)); Then fetch chunks[0] immediately, and the rest in sequence. The useUrlCache already deduplicates, so if some IDs are already cached from a previous page visit, those won't be re-fetched."
     }
   ]
 }

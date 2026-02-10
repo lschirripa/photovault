@@ -158,8 +158,8 @@ export function FaceTags({ assetId, groupId }: FaceTagsProps) {
                   alt={face.personName || "Unknown"}
                   width={20}
                   height={20}
-                  unoptimized
                   className="w-5 h-5 rounded-full object-cover"
+                  sizes="20px"
                 />
               ) : (
                 <span className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center text-[10px]">?</span>
@@ -191,8 +191,8 @@ export function FaceTags({ assetId, groupId }: FaceTagsProps) {
                               alt={person.name || "Unknown"}
                               width={24}
                               height={24}
-                              unoptimized
                               className="w-6 h-6 rounded-full object-cover"
+                              sizes="24px"
                             />
                           ) : (
                             <span className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center text-xs">?</span>

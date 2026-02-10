@@ -35,7 +35,6 @@ export function PersonCard({ person, groupId, onRename, onDismiss, selected, onT
           src={person.faceCropUrl}
           alt={person.name || "Unknown person"}
           fill
-          unoptimized
           className="object-cover"
           sizes="120px"
         />

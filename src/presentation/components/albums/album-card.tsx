@@ -28,7 +28,6 @@ export function AlbumCard({
               src={coverUrl}
               alt={album.name}
               fill
-              unoptimized
               className="object-cover"
               sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
             />
