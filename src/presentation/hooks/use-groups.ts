@@ -12,7 +12,7 @@ interface CreateGroupInput {
 }
 
 type GroupMemberRow = Tables<"group_members">;
-type MediaAssetRow = Pick<Tables<"media_assets">, "id" | "group_id" | "created_at">;
+type MediaAssetRow = Pick<Tables<"media_assets">, "group_id" | "created_at">;
 
 export function useGroups() {
   const [groups, setGroups] = useState<GroupWithStats[]>([]);
@@ -70,10 +70,10 @@ export function useGroups() {
         memberCountMap.set(m.group_id, (memberCountMap.get(m.group_id) ?? 0) + 1);
       }
 
-      // 3. Fetch recent media for these groups (for counts + recent IDs)
+      // 3. Fetch media counts and last activity per group
       const { data: mediaRows, error: mediaError } = (await supabase
         .from("media_assets")
-        .select("id, group_id, created_at")
+        .select("group_id, created_at")
         .in("group_id", groupIds)
         .eq("status", "ready")
         .order("created_at", { ascending: false })
@@ -86,7 +86,6 @@ export function useGroups() {
 
       const mediaCountMap = new Map<string, number>();
       const lastActivityMap = new Map<string, Date>();
-      const recentMediaMap = new Map<string, string[]>();
 
       for (const m of mediaRows ?? []) {
         mediaCountMap.set(m.group_id, (mediaCountMap.get(m.group_id) ?? 0) + 1);
@@ -94,12 +93,6 @@ export function useGroups() {
         const createdAt = new Date(m.created_at);
         if (!lastActivityMap.has(m.group_id) || createdAt > lastActivityMap.get(m.group_id)!) {
           lastActivityMap.set(m.group_id, createdAt);
-        }
-
-        const recent = recentMediaMap.get(m.group_id) ?? [];
-        if (recent.length < 4) {
-          recent.push(m.id);
-          recentMediaMap.set(m.group_id, recent);
         }
       }
 
@@ -111,6 +104,7 @@ export function useGroups() {
           name: g.name,
           description: g.description,
           coverImageUrl: g.cover_image_url,
+          coverMediaId: g.cover_media_id,
           createdBy: g.created_by,
           createdAt: new Date(g.created_at),
           updatedAt: new Date(g.updated_at),
@@ -118,7 +112,7 @@ export function useGroups() {
           mediaCount: mediaCountMap.get(g.id) ?? 0,
           userRole: roleByGroupId.get(g.id) ?? MemberRole.MEMBER,
           lastActivityAt: lastActivityMap.get(g.id) ?? null,
-          recentMediaIds: recentMediaMap.get(g.id) ?? [],
+          recentMediaIds: [],
         };
       });
 
@@ -180,6 +174,7 @@ export function useGroups() {
           name: data.name,
           description: data.description,
           coverImageUrl: data.cover_image_url,
+          coverMediaId: data.cover_media_id,
           createdBy: data.created_by,
           createdAt: new Date(data.created_at),
           updatedAt: new Date(data.updated_at),

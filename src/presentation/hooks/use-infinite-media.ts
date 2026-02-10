@@ -53,11 +53,6 @@ function applyFilters(query: any, filters: MediaFilters) {
   if (filters.mediaType) {
     query = query.eq("media_type", filters.mediaType);
   }
-  if (filters.camera) {
-    const [make, model] = filters.camera.split("|");
-    if (make) query = query.eq("camera_make", make);
-    if (model) query = query.eq("camera_model", model);
-  }
   if (filters.dateFrom) {
     query = query.gte("date_taken", filters.dateFrom);
   }

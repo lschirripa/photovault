@@ -166,21 +166,27 @@ export interface Database {
         Row: {
           id: string;
           display_name: string;
+          email: string | null;
           avatar_url: string | null;
+          pinned_group_id: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id: string;
           display_name: string;
+          email?: string | null;
           avatar_url?: string | null;
+          pinned_group_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
           display_name?: string;
+          email?: string | null;
           avatar_url?: string | null;
+          pinned_group_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -189,6 +195,12 @@ export interface Database {
             foreignKeyName: "profiles_id_fkey";
             columns: ["id"];
             referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "profiles_pinned_group_id_fkey";
+            columns: ["pinned_group_id"];
+            referencedRelation: "groups";
             referencedColumns: ["id"];
           }
         ];
@@ -199,6 +211,7 @@ export interface Database {
           name: string;
           description: string | null;
           cover_image_url: string | null;
+          cover_media_id: string | null;
           created_by: string;
           created_at: string;
           updated_at: string;
@@ -208,6 +221,7 @@ export interface Database {
           name: string;
           description?: string | null;
           cover_image_url?: string | null;
+          cover_media_id?: string | null;
           created_by: string;
           created_at?: string;
           updated_at?: string;
@@ -217,6 +231,7 @@ export interface Database {
           name?: string;
           description?: string | null;
           cover_image_url?: string | null;
+          cover_media_id?: string | null;
           created_by?: string;
           created_at?: string;
           updated_at?: string;
@@ -226,6 +241,12 @@ export interface Database {
             foreignKeyName: "groups_created_by_fkey";
             columns: ["created_by"];
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "groups_cover_media_id_fkey";
+            columns: ["cover_media_id"];
+            referencedRelation: "media_assets";
             referencedColumns: ["id"];
           }
         ];
@@ -261,6 +282,46 @@ export interface Database {
           },
           {
             foreignKeyName: "group_members_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      group_activities: {
+        Row: {
+          id: string;
+          group_id: string;
+          user_id: string;
+          activity_type: string;
+          metadata: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          group_id: string;
+          user_id: string;
+          activity_type: string;
+          metadata?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          group_id?: string;
+          user_id?: string;
+          activity_type?: string;
+          metadata?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "group_activities_group_id_fkey";
+            columns: ["group_id"];
+            referencedRelation: "groups";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "group_activities_user_id_fkey";
             columns: ["user_id"];
             referencedRelation: "profiles";
             referencedColumns: ["id"];

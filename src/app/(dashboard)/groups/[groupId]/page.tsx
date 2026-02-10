@@ -6,8 +6,8 @@ import Link from "next/link";
 import { createClient } from "@/infrastructure/supabase/browser";
 import { useAuth } from "@/presentation/providers/auth-provider";
 import { useMediaUpload } from "@/presentation/hooks/use-media-upload";
-import type { UploadProgress } from "@/presentation/hooks/use-media-upload";
-import { formatBytes } from "@/lib/utils";
+import { useWakeLock } from "@/presentation/hooks/use-wake-lock";
+import { UploadProgressPanel } from "@/presentation/components/upload/upload-progress-panel";
 import { useMediaActions } from "@/presentation/hooks/use-media-actions";
 import { useMediaSelection } from "@/presentation/hooks/use-media-selection";
 import { useMediaDownload } from "@/presentation/hooks/use-media-download";
@@ -29,122 +29,13 @@ import { InviteModal } from "@/presentation/components/groups/invite-modal";
 import { useInvites } from "@/presentation/hooks/use-invites";
 import { usePersons } from "@/presentation/hooks/use-persons";
 import { PersonCard } from "@/presentation/components/persons/person-card";
+import { useGroupUpdate } from "@/presentation/hooks/use-group-update";
 import type { Group } from "@/domain/entities/group";
 import type { MediaAsset } from "@/domain/entities/media-asset";
 import type { AlbumResponseDTO } from "@/application/dto/album-dto";
 import { MediaStatus } from "@/domain/enums/media-type";
 import { MemberRole, hasPermission } from "@/domain/enums/member-role";
 import type { Tables } from "@/types/supabase";
-
-function getUploadSpeed(upload: UploadProgress): string | null {
-  if (!upload.startedAt || !upload.bytesLoaded || upload.status !== "uploading") return null;
-  const elapsed = (Date.now() - upload.startedAt) / 1000;
-  if (elapsed < 1) return null;
-  const bytesPerSec = upload.bytesLoaded / elapsed;
-  return `${formatBytes(bytesPerSec)}/s`;
-}
-
-function UploadRow({
-  upload,
-  onRetry,
-  onRemove,
-}: {
-  upload: UploadProgress;
-  onRetry: (fileId: string) => void;
-  onRemove: (fileId: string) => void;
-}) {
-  const isActive = upload.status === "uploading" || upload.status === "retrying";
-  const isError = upload.status === "error";
-  const isComplete = upload.status === "complete";
-  const speed = getUploadSpeed(upload);
-
-  const barColor = isError
-    ? "bg-red-500"
-    : isComplete
-      ? "bg-green-500"
-      : upload.status === "retrying"
-        ? "bg-yellow-500"
-        : "bg-blue-500";
-
-  const statusIcon = isError
-    ? "\u26A0" // warning
-    : isComplete
-      ? "\u2713" // checkmark
-      : upload.status === "retrying"
-        ? "\u21BB" // retry arrow
-        : null; // spinner handled via CSS
-
-  return (
-    <div
-      className={`relative overflow-hidden rounded-xl ${
-        isError ? "bg-red-50 dark:bg-red-900/20" : "bg-gray-50 dark:bg-gray-900"
-      }`}
-    >
-      {/* Progress bar */}
-      <div
-        className={`absolute bottom-0 left-0 h-1 transition-all duration-300 ${barColor}`}
-        style={{ width: `${upload.progress}%` }}
-      />
-      <div className="flex items-center gap-3 p-3">
-        {/* Status icon */}
-        <span className="flex-shrink-0 w-5 text-center">
-          {statusIcon ? (
-            <span className={isError ? "text-red-500" : isComplete ? "text-green-600" : "text-yellow-500"}>
-              {statusIcon}
-            </span>
-          ) : (
-            <span className="inline-block w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          )}
-        </span>
-
-        {/* Filename + details */}
-        <div className="flex-1 min-w-0">
-          <div className="truncate text-sm font-medium">{upload.filename}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2 mt-0.5">
-            {isError ? (
-              <span className="text-red-600 dark:text-red-400">{upload.error || "Failed"}</span>
-            ) : (
-              <>
-                {upload.bytesLoaded != null && upload.bytesTotal != null && upload.bytesTotal > 0 && (
-                  <span>{formatBytes(upload.bytesLoaded)} / {formatBytes(upload.bytesTotal)}</span>
-                )}
-                {speed && <span>{speed}</span>}
-                {isActive && upload.retryCount > 0 && (
-                  <span>Retry {upload.retryCount}/{3}</span>
-                )}
-                {upload.status === "processing" && <span>Processing...</span>}
-                {upload.status === "pending" && <span>Waiting...</span>}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Progress percentage */}
-        {!isError && !isComplete && (
-          <span className="text-sm tabular-nums text-gray-500 flex-shrink-0">{upload.progress}%</span>
-        )}
-
-        {/* Retry button for errors */}
-        {isError && (
-          <button
-            onClick={() => onRetry(upload.fileId)}
-            className="text-xs px-2 py-1 rounded bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800/60 flex-shrink-0"
-          >
-            Retry
-          </button>
-        )}
-
-        {/* Dismiss */}
-        <button
-          onClick={() => onRemove(upload.fileId)}
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 flex-shrink-0"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export default function GroupDetailPage() {
   const params = useParams();
@@ -153,7 +44,8 @@ export default function GroupDetailPage() {
   const [group, setGroup] = useState<Group | null>(null);
   const [groupLoading, setGroupLoading] = useState(true);
   const [groupError, setGroupError] = useState<string | null>(null);
-  const { uploads, uploadFiles, retryUpload, removeUpload, clearUploads } = useMediaUpload(groupId);
+  const { uploads, uploadFiles, retryUpload, retryAllFailed, removeUpload, clearUploads, isUploading } = useMediaUpload(groupId);
+  const wakeLock = useWakeLock();
   const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
   const [originalUrls, setOriginalUrls] = useState<Map<string, string>>(new Map());
   const [userRole, setUserRole] = useState<MemberRole | null>(null);
@@ -169,7 +61,11 @@ export default function GroupDetailPage() {
   const [filters, setFilters] = useState<MediaFilters>({});
   const [sort, setSort] = useState<MediaSort>(DEFAULT_SORT);
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState("");
   const supabase = createClient();
+
+  const { setCover, rename } = useGroupUpdate(groupId);
 
   // Combine explicit filters with person selection
   const combinedFilters = useMemo<MediaFilters>(() => {
@@ -190,7 +86,7 @@ export default function GroupDetailPage() {
     updateItems,
   } = useInfiniteMedia({ groupId, filters: combinedFilters, sort });
 
-  const { cameras, locationData, hasAnyLocation, dateRange, fetchLocationChildren } = useMediaFilterOptions(groupId);
+  const { locationData, hasAnyLocation, dateRange, fetchLocationChildren } = useMediaFilterOptions(groupId);
 
   const {
     invites,
@@ -289,6 +185,7 @@ export default function GroupDetailPage() {
         name: groupData.name,
         description: groupData.description,
         coverImageUrl: groupData.cover_image_url,
+        coverMediaId: groupData.cover_media_id,
         createdBy: groupData.created_by,
         createdAt: new Date(groupData.created_at),
         updatedAt: new Date(groupData.updated_at),
@@ -349,6 +246,25 @@ export default function GroupDetailPage() {
       fetchInvites();
     }
   }, [showInviteModal, isAdmin, fetchInvites]);
+
+  // Wake lock: keep screen on during uploads
+  useEffect(() => {
+    if (isUploading) {
+      wakeLock.request();
+    } else {
+      wakeLock.release();
+    }
+  }, [isUploading, wakeLock]);
+
+  // Warn before closing tab during uploads
+  useEffect(() => {
+    if (!isUploading) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isUploading]);
 
   // Fetch album cover URLs in batch (cache handles dedup/TTL)
   useEffect(() => {
@@ -591,7 +507,51 @@ export default function GroupDetailPage() {
         </Link>
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{group.name}</h1>
+            <div className="flex items-center gap-2">
+              {editingName ? (
+                <input
+                  autoFocus
+                  value={nameValue}
+                  onChange={(e) => setNameValue(e.target.value)}
+                  onBlur={async () => {
+                    const trimmed = nameValue.trim();
+                    if (trimmed && trimmed !== group.name) {
+                      const result = await rename(trimmed);
+                      if (result) {
+                        setGroup({ ...group, name: trimmed });
+                      }
+                    }
+                    setEditingName(false);
+                  }}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter") {
+                      (e.target as HTMLInputElement).blur();
+                    } else if (e.key === "Escape") {
+                      setEditingName(false);
+                    }
+                  }}
+                  className="text-2xl font-bold tracking-tight bg-transparent border-b-2 border-blue-500 outline-none w-full max-w-md"
+                />
+              ) : (
+                <>
+                  <h1 className="text-2xl font-bold tracking-tight">{group.name}</h1>
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        setNameValue(group.name);
+                        setEditingName(true);
+                      }}
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                      title="Rename group"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
             {group.description && (
               <p className="text-gray-600 dark:text-gray-400 mt-1">
                 {group.description}
@@ -689,7 +649,6 @@ export default function GroupDetailPage() {
           sort={sort}
           onFiltersChange={setFilters}
           onSortChange={setSort}
-          cameras={cameras}
           locationData={locationData}
           hasAnyLocation={hasAnyLocation}
           dateRange={dateRange}
@@ -713,27 +672,13 @@ export default function GroupDetailPage() {
         </div>
       )}
 
-      {uploads.length > 0 && (
-        <div className="mb-6 space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-500">Uploads</span>
-            <button
-              onClick={clearUploads}
-              className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-            >
-              Clear all
-            </button>
-          </div>
-          {uploads.map((upload) => (
-            <UploadRow
-              key={upload.fileId}
-              upload={upload}
-              onRetry={retryUpload}
-              onRemove={removeUpload}
-            />
-          ))}
-        </div>
-      )}
+      <UploadProgressPanel
+        uploads={uploads}
+        onRetry={retryUpload}
+        onRetryAll={retryAllFailed}
+        onRemove={removeUpload}
+        onClear={clearUploads}
+      />
 
       {media.length === 0 ? (
         isFiltersActive(combinedFilters) ? (
@@ -854,6 +799,12 @@ export default function GroupDetailPage() {
         onDelete={setDeleteTarget}
         canDelete={canDeleteMedia}
         groupId={groupId}
+        onSetAsCover={async (assetId) => {
+          const result = await setCover(assetId);
+          if (result && group) {
+            setGroup({ ...group, coverMediaId: assetId });
+          }
+        }}
       />
 
       {/* Single Delete Confirmation Dialog */}

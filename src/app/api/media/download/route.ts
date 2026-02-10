@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     // Get the asset and verify user has access (via group membership)
     const { data: asset, error: assetError } = (await supabase
       .from("media_assets")
-      .select("*, groups!inner(id)")
+      .select("*, groups!media_assets_group_id_fkey!inner(id)")
       .eq("id", assetId)
       .single()) as unknown as {
       data: (Tables<"media_assets"> & { groups: { id: string } }) | null;

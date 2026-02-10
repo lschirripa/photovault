@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/presentation/components/ui/button";
-import type { CameraOption, LocationData } from "@/presentation/hooks/use-media-filter-options";
+import type { LocationData } from "@/presentation/hooks/use-media-filter-options";
 import type { MediaFilters, MediaSort } from "@/domain/types/media-filters";
 import {
   SORT_OPTIONS,
@@ -17,7 +17,6 @@ interface MediaFilterBarProps {
   sort: MediaSort;
   onFiltersChange: (filters: MediaFilters) => void;
   onSortChange: (sort: MediaSort) => void;
-  cameras: CameraOption[];
   locationData: LocationData;
   hasAnyLocation: boolean;
   dateRange: { earliest: string | null; latest: string | null };
@@ -30,7 +29,6 @@ export function MediaFilterBar({
   sort,
   onFiltersChange,
   onSortChange,
-  cameras,
   locationData,
   hasAnyLocation,
   dateRange,
@@ -38,7 +36,6 @@ export function MediaFilterBar({
 }: MediaFilterBarProps) {
   const [expanded, setExpanded] = useState(false);
   const activeCount = countActiveFilters(filters);
-  const topCameras = cameras.slice(0, 3);
 
   const sortIndex = SORT_OPTIONS.findIndex(
     (o) => o.field === sort.field && o.direction === sort.direction
@@ -56,13 +53,6 @@ export function MediaFilterBar({
     }
   };
 
-  const toggleCamera = (value: string) => {
-    onFiltersChange({
-      ...filters,
-      camera: filters.camera === value ? undefined : value,
-    });
-  };
-
   const clearAll = () => {
     onFiltersChange({});
   };
@@ -73,13 +63,6 @@ export function MediaFilterBar({
     activeChips.push({
       label: filters.mediaType === "image" ? "Photos" : "Videos",
       key: "mediaType",
-    });
-  }
-  if (filters.camera) {
-    const cam = cameras.find((c) => c.value === filters.camera);
-    activeChips.push({
-      label: `Camera: ${cam?.label ?? filters.camera}`,
-      key: "camera",
     });
   }
   if (filters.dateFrom || filters.dateTo) {
@@ -113,9 +96,6 @@ export function MediaFilterBar({
       case "mediaType":
         delete updated.mediaType;
         break;
-      case "camera":
-        delete updated.camera;
-        break;
       case "date":
         delete updated.dateFrom;
         delete updated.dateTo;
@@ -148,7 +128,7 @@ export function MediaFilterBar({
 
   return (
     <div className="mb-4 space-y-2">
-      {/* Top row: Sort + camera chips + filter toggle */}
+      {/* Top row: Sort + filter toggle */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* Sort dropdown */}
         <select
@@ -162,22 +142,6 @@ export function MediaFilterBar({
             </option>
           ))}
         </select>
-
-        {/* Quick camera chips */}
-        {topCameras.map((cam) => (
-          <button
-            key={cam.value}
-            onClick={() => toggleCamera(cam.value)}
-            className={cn(
-              "h-8 px-3 text-xs rounded-full border transition-colors",
-              filters.camera === cam.value
-                ? "bg-blue-600 text-white border-blue-600"
-                : "border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-            )}
-          >
-            {cam.model}
-          </button>
-        ))}
 
         <div className="flex-1" />
 
@@ -234,30 +198,6 @@ export function MediaFilterBar({
               ))}
             </div>
           </div>
-
-          {/* Camera */}
-          {cameras.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600 dark:text-gray-400 w-16 shrink-0">Camera:</span>
-              <select
-                value={filters.camera ?? ""}
-                onChange={(e) =>
-                  onFiltersChange({
-                    ...filters,
-                    camera: e.target.value || undefined,
-                  })
-                }
-                className={selectClass}
-              >
-                <option value="">All cameras</option>
-                {cameras.map((cam) => (
-                  <option key={cam.value} value={cam.value}>
-                    {cam.label} ({cam.count})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
 
           {/* Date range */}
           <div className="flex items-center gap-2">

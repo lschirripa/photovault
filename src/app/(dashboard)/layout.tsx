@@ -55,8 +55,8 @@ export default function DashboardLayout({
                 Map
               </Link>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+              <span className="text-sm text-gray-600 dark:text-gray-400 truncate hidden sm:inline max-w-[150px] lg:max-w-none">
                 {user.email}
               </span>
               <ActivityDropdown />

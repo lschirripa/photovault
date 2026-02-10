@@ -51,7 +51,7 @@ export default function AlbumDetailPage() {
     removeItems,
   } = useInfiniteMedia({ groupId, albumId, filters, sort });
 
-  const { cameras, locationData, hasAnyLocation, dateRange, fetchLocationChildren } = useMediaFilterOptions(groupId, albumId);
+  const { locationData, hasAnyLocation, dateRange, fetchLocationChildren } = useMediaFilterOptions(groupId, albumId);
 
   const readyMedia = useMemo(
     () => media.filter((m) => m.status === "ready"),
@@ -309,7 +309,6 @@ export default function AlbumDetailPage() {
         sort={sort}
         onFiltersChange={setFilters}
         onSortChange={setSort}
-        cameras={cameras}
         locationData={locationData}
         hasAnyLocation={hasAnyLocation}
         dateRange={dateRange}

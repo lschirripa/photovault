@@ -8,7 +8,6 @@ export interface MediaSort {
 
 export interface MediaFilters {
   mediaType?: "image" | "video";
-  camera?: string; // "make|model" format
   dateFrom?: string; // ISO date string
   dateTo?: string; // ISO date string
   hasLocation?: boolean;
@@ -46,7 +45,6 @@ export const SIZE_PRESETS = [
 export function isFiltersActive(filters: MediaFilters): boolean {
   return !!(
     filters.mediaType ||
-    filters.camera ||
     filters.dateFrom ||
     filters.dateTo ||
     filters.hasLocation ||
@@ -62,7 +60,6 @@ export function isFiltersActive(filters: MediaFilters): boolean {
 export function countActiveFilters(filters: MediaFilters): number {
   let count = 0;
   if (filters.mediaType) count++;
-  if (filters.camera) count++;
   if (filters.dateFrom || filters.dateTo) count++;
   if (filters.hasLocation) count++;
   if (filters.locationCountry) count++;

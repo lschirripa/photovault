@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/presentation/providers/auth-provider";
 import { useGroups } from "@/presentation/hooks/use-groups";
 import { useMediaUpload } from "@/presentation/hooks/use-media-upload";
+import { useWakeLock } from "@/presentation/hooks/use-wake-lock";
+import { UploadProgressPanel } from "@/presentation/components/upload/upload-progress-panel";
 import { useAlbums } from "@/presentation/hooks/use-albums";
 import { useGoogleDrivePicker } from "@/presentation/hooks/use-google-drive-picker";
 import { downloadDriveFile, TokenExpiredError } from "@/infrastructure/google/google-drive-downloader";
@@ -43,7 +45,8 @@ export default function UploadPage() {
   const { user, loading: authLoading } = useAuth();
   const { groups, fetchGroups, loading: groupsLoading } = useGroups();
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
-  const { uploads, uploadFiles, clearUploads } = useMediaUpload(selectedGroupId);
+  const { uploads, uploadFiles, clearUploads, retryUpload, retryAllFailed, removeUpload, isUploading } = useMediaUpload(selectedGroupId);
+  const wakeLock = useWakeLock();
   const [dragOver, setDragOver] = useState(false);
   const router = useRouter();
 
@@ -98,6 +101,25 @@ export default function UploadPage() {
   useEffect(() => {
     albumsFetched.current = false;
   }, [selectedGroupId]);
+
+  // Wake lock: keep screen on during uploads
+  useEffect(() => {
+    if (isUploading) {
+      wakeLock.request();
+    } else {
+      wakeLock.release();
+    }
+  }, [isUploading, wakeLock]);
+
+  // Warn before closing tab during uploads
+  useEffect(() => {
+    if (!isUploading) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isUploading]);
 
   const handleFiles = async (files: File[]) => {
     if (!selectedGroupId) return;
@@ -457,13 +479,16 @@ export default function UploadPage() {
         )}
 
         {uploads.length > 0 && (
-          <div className="mt-6 space-y-2">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium">
-                {uploads.filter((u) => u.status === "complete").length} of{" "}
-                {uploads.length} complete
-              </span>
-              {allComplete && (
+          <div className="mt-6">
+            <UploadProgressPanel
+              uploads={uploads}
+              onRetry={retryUpload}
+              onRetryAll={retryAllFailed}
+              onRemove={removeUpload}
+              onClear={clearUploads}
+            />
+            {allComplete && (
+              <div className="text-center">
                 <button
                   onClick={() => {
                     clearUploads();
@@ -474,37 +499,8 @@ export default function UploadPage() {
                 >
                   View in group
                 </button>
-              )}
-            </div>
-            {uploads.map((upload) => (
-              <div
-                key={upload.fileId}
-                className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg"
-              >
-                <span className="flex-1 truncate text-sm">{upload.filename}</span>
-                <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all"
-                    style={{ width: `${upload.progress}%` }}
-                  />
-                </div>
-                <span
-                  className={`text-xs capitalize ${
-                    upload.status === "error"
-                      ? "text-red-600"
-                      : upload.status === "complete"
-                      ? "text-green-600"
-                      : upload.status === "retrying"
-                      ? "text-amber-600"
-                      : "text-gray-500"
-                  }`}
-                >
-                  {upload.status === "retrying"
-                    ? `Retrying (${upload.retryCount}/${3})`
-                    : upload.status}
-                </span>
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>

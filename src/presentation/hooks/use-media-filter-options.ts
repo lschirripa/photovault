@@ -3,14 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/infrastructure/supabase/browser";
 
-export interface CameraOption {
-  make: string;
-  model: string;
-  label: string;
-  value: string; // "make|model"
-  count: number;
-}
-
 export interface LocationOption {
   value: string;
   label: string;
@@ -24,7 +16,6 @@ export interface LocationData {
 }
 
 export interface FilterOptions {
-  cameras: CameraOption[];
   locationData: LocationData;
   hasAnyLocation: boolean;
   dateRange: { earliest: string | null; latest: string | null };
@@ -44,7 +35,6 @@ export function useMediaFilterOptions(
   groupId: string,
   albumId?: string
 ): FilterOptions {
-  const [cameras, setCameras] = useState<CameraOption[]>([]);
   const [locationData, setLocationData] = useState<LocationData>({
     countries: [],
     states: [],
@@ -91,10 +81,8 @@ export function useMediaFilterOptions(
 
       // Fetch all relevant assets with the columns we need
       const { data: assets } = (await baseQuery()
-        .select("camera_make, camera_model, location_country, location_state, location_city, latitude, date_taken")) as unknown as {
+        .select("location_country, location_state, location_city, latitude, date_taken")) as unknown as {
         data: {
-          camera_make: string | null;
-          camera_model: string | null;
           location_country: string | null;
           location_state: string | null;
           location_city: string | null;
@@ -108,29 +96,6 @@ export function useMediaFilterOptions(
         setLoading(false);
         return;
       }
-
-      // Compute camera options
-      const cameraMap = new Map<string, { make: string; model: string; count: number }>();
-      for (const a of assets) {
-        if (a.camera_make && a.camera_model) {
-          const key = `${a.camera_make}|${a.camera_model}`;
-          const existing = cameraMap.get(key);
-          if (existing) {
-            existing.count++;
-          } else {
-            cameraMap.set(key, { make: a.camera_make, model: a.camera_model, count: 1 });
-          }
-        }
-      }
-      const cameraOptions: CameraOption[] = Array.from(cameraMap.entries())
-        .map(([value, { make, model, count }]) => ({
-          make,
-          model,
-          label: `${make} ${model}`,
-          value,
-          count,
-        }))
-        .sort((a, b) => b.count - a.count);
 
       // Store location rows for hierarchical filtering
       const locationRows: LocationRow[] = assets.map((a) => ({
@@ -164,7 +129,6 @@ export function useMediaFilterOptions(
         }
       }
 
-      setCameras(cameraOptions);
       setLocationData({ countries, states: [], cities: [] });
       setHasAnyLocation(locationCount > 0);
       setDateRange({ earliest, latest });
@@ -218,5 +182,5 @@ export function useMediaFilterOptions(
     [allLocationRows]
   );
 
-  return { cameras, locationData, hasAnyLocation, dateRange, loading, fetchLocationChildren };
+  return { locationData, hasAnyLocation, dateRange, loading, fetchLocationChildren };
 }

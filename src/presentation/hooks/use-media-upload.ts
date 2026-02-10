@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { getMediaTypeFromMime } from "@/domain/enums/media-type";
 import { captureVideoFrame } from "@/presentation/utils/capture-video-frame";
 
@@ -15,6 +15,26 @@ function generateUUID(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+// Detect optimal upload concurrency based on network and device
+interface NetworkInformation {
+  effectiveType?: "slow-2g" | "2g" | "3g" | "4g";
+}
+
+function getOptimalConcurrency(): number {
+  if (typeof window === "undefined") return 3; // SSR fallback
+
+  const conn = (navigator as Navigator & { connection?: NetworkInformation }).connection;
+  const isMobile = window.innerWidth < 768 && navigator.maxTouchPoints > 0;
+
+  if (conn?.effectiveType) {
+    if (conn.effectiveType === "2g" || conn.effectiveType === "slow-2g") return 1;
+    if (conn.effectiveType === "3g") return 1;
+    // 4g: use device heuristic
+  }
+
+  return isMobile ? 2 : 3;
 }
 
 const MAX_RETRIES = 3;
@@ -342,7 +362,7 @@ export function useMediaUpload(groupId: string) {
     async (files: File[]): Promise<string[]> => {
       setError(null);
       const results: string[] = [];
-      const concurrencyLimit = 3;
+      const concurrencyLimit = getOptimalConcurrency();
 
       // Process files in batches of `concurrencyLimit`
       for (let i = 0; i < files.length; i += concurrencyLimit) {
@@ -388,6 +408,25 @@ export function useMediaUpload(groupId: string) {
     [uploadFile, updateUpload]
   );
 
+  const retryAllFailed = useCallback(async () => {
+    const failedUploads = Array.from(uploads.values()).filter(
+      (u) => u.status === "error"
+    );
+    await Promise.allSettled(
+      failedUploads.map((u) => retryUpload(u.fileId))
+    );
+  }, [uploads, retryUpload]);
+
+  const isUploading = useMemo(() => {
+    return Array.from(uploads.values()).some(
+      (u) =>
+        u.status === "pending" ||
+        u.status === "uploading" ||
+        u.status === "processing" ||
+        u.status === "retrying"
+    );
+  }, [uploads]);
+
   const clearUploads = useCallback(() => {
     setUploads(new Map());
     setError(null);
@@ -406,9 +445,11 @@ export function useMediaUpload(groupId: string) {
   return {
     uploads: Array.from(uploads.values()),
     error,
+    isUploading,
     uploadFile,
     uploadFiles,
     retryUpload,
+    retryAllFailed,
     clearUploads,
     removeUpload,
   };

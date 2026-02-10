@@ -5,6 +5,7 @@ export interface Group {
   name: string;
   description: string | null;
   coverImageUrl: string | null;
+  coverMediaId: string | null;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
@@ -21,6 +22,7 @@ export interface UpdateGroupInput {
   name?: string;
   description?: string | null;
   coverImageUrl?: string | null;
+  coverMediaId?: string | null;
 }
 
 export interface GroupWithStats extends Group {

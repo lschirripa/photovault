@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     // Get all assets and verify user has access
     const { data: assets, error: assetsError } = (await supabase
       .from("media_assets")
-      .select("*, groups!inner(id)")
+      .select("*, groups!media_assets_group_id_fkey!inner(id)")
       .in("id", assetIds)) as unknown as {
       data: (Tables<"media_assets"> & { groups: { id: string } })[] | null;
       error: Error | null;

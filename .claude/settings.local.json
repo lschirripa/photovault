@@ -16,7 +16,8 @@
       "Bash(curl:*)",
       "Bash(git fetch:*)",
       "Bash(git stash:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(find:*)"
     ]
   }
 }

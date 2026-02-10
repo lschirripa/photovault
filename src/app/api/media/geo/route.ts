@@ -17,7 +17,7 @@ export async function GET() {
     const { data, error } = (await supabase
       .from("media_assets")
       .select(
-        "id, group_id, latitude, longitude, thumbnail_key, filename, location_country, location_city, groups!inner(name)"
+        "id, group_id, latitude, longitude, thumbnail_key, filename, location_country, location_city, groups!media_assets_group_id_fkey!inner(name)"
       )
       .not("latitude", "is", null)
       .not("longitude", "is", null)) as unknown as {

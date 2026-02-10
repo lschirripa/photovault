@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/presentation/providers/auth-provider";
 import { useGroups } from "@/presentation/hooks/use-groups";
+import { usePinnedGroup } from "@/presentation/hooks/use-pinned-group";
 import { useUrlCache } from "@/presentation/hooks/use-url-cache";
 import { MemberRole } from "@/domain/enums/member-role";
 import { Button } from "@/presentation/components/ui/button";
@@ -13,6 +14,7 @@ import { GroupHero } from "@/presentation/components/groups/group-hero";
 export default function GroupsPage() {
   const { user, loading: authLoading } = useAuth();
   const { groups, loading, error, fetchGroups, createGroup, deleteGroup } = useGroups();
+  const { pinnedGroupId, pinnedMediaIds, fetchPinnedGroup, pinGroup, unpinGroup } = usePinnedGroup();
   const { fetchUrls } = useUrlCache();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -20,28 +22,39 @@ export default function GroupsPage() {
   const [newGroupDescription, setNewGroupDescription] = useState("");
   const [deleteConfirmGroupId, setDeleteConfirmGroupId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+  const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
+  const [heroThumbnailUrls, setHeroThumbnailUrls] = useState<Record<string, string>>({});
 
-  // Hero group: first group with recent media
-  const heroGroup = useMemo(
-    () => groups.find((g) => g.recentMediaIds.length > 0) ?? null,
-    [groups]
+  // Find the pinned group object
+  const pinnedGroup = useMemo(
+    () => (pinnedGroupId ? groups.find((g) => g.id === pinnedGroupId) ?? null : null),
+    [groups, pinnedGroupId]
   );
 
-  // Fetch groups on mount
+  // Fetch groups + pinned group on mount
   useEffect(() => {
     if (user) {
       fetchGroups();
+      fetchPinnedGroup();
     }
-  }, [user, fetchGroups]);
+  }, [user, fetchGroups, fetchPinnedGroup]);
 
-  // Fetch thumbnail URLs when groups load
+  // Fetch cover URLs for groups that have a cover_media_id
   useEffect(() => {
-    const allMediaIds = groups.flatMap((g) => g.recentMediaIds);
-    if (allMediaIds.length === 0) return;
+    const coverMediaIds = groups
+      .map((g) => g.coverMediaId)
+      .filter((id): id is string => id !== null && id !== undefined);
+    if (coverMediaIds.length === 0) return;
 
-    fetchUrls(allMediaIds, "thumbnail").then(setThumbnailUrls);
+    fetchUrls(coverMediaIds, "thumbnail").then(setCoverUrls);
   }, [groups, fetchUrls]);
+
+  // Fetch hero thumbnail URLs for the pinned group's recent media
+  useEffect(() => {
+    if (pinnedMediaIds.length === 0) return;
+
+    fetchUrls(pinnedMediaIds, "thumbnail").then(setHeroThumbnailUrls);
+  }, [pinnedMediaIds, fetchUrls]);
 
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,6 +84,17 @@ export default function GroupsPage() {
     }
   }, [deleteConfirmGroupId, deleteGroup]);
 
+  const handlePinToggle = useCallback(
+    async (groupId: string) => {
+      if (pinnedGroupId === groupId) {
+        await unpinGroup();
+      } else {
+        await pinGroup(groupId);
+      }
+    },
+    [pinnedGroupId, pinGroup, unpinGroup]
+  );
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -95,9 +119,14 @@ export default function GroupsPage() {
   return (
     <div className="min-h-screen p-4 sm:p-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        {/* Hero Banner */}
-        {heroGroup && (
-          <GroupHero group={heroGroup} thumbnailUrls={thumbnailUrls} />
+        {/* Hero Banner — only when a group is pinned */}
+        {pinnedGroup && (
+          <GroupHero
+            group={pinnedGroup}
+            thumbnailUrls={heroThumbnailUrls}
+            recentMediaIds={pinnedMediaIds}
+            onUnpin={unpinGroup}
+          />
         )}
 
         {/* Header */}
@@ -143,9 +172,11 @@ export default function GroupsPage() {
               <GroupCard
                 key={group.id}
                 group={group}
-                thumbnailUrls={thumbnailUrls}
+                coverUrl={group.coverMediaId ? coverUrls[group.coverMediaId] ?? null : null}
                 isOwner={group.userRole === MemberRole.OWNER}
+                isPinned={pinnedGroupId === group.id}
                 onDelete={() => setDeleteConfirmGroupId(group.id)}
+                onPin={() => handlePinToggle(group.id)}
               />
             ))}
           </div>

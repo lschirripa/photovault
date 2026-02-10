@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { MediaAsset } from "@/domain/entities/media-asset";
+import { createClient } from "@/infrastructure/supabase/browser";
 import { formatBytes } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +35,24 @@ function Row({ label, value }: { label: string; value: string | number | null | 
 
 function MetadataContent({ asset }: { asset: MediaAsset }) {
   const meta = asset.metadata;
+  const [uploaderName, setUploaderName] = useState<string | null>(null);
+  const [uploaderEmail, setUploaderEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("display_name, email")
+      .eq("id", asset.uploadedBy)
+      .single()
+      .then(({ data }) => {
+        const profile = data as { display_name: string; email: string | null } | null;
+        if (profile) {
+          setUploaderName(profile.display_name);
+          setUploaderEmail(profile.email);
+        }
+      });
+  }, [asset.uploadedBy]);
 
   return (
     <>
@@ -52,6 +72,8 @@ function MetadataContent({ asset }: { asset: MediaAsset }) {
             day: "numeric",
           })}
         />
+        <Row label="Uploaded by" value={uploaderName} />
+        <Row label="Email" value={uploaderEmail} />
       </Section>
 
       {/* Camera section */}
