@@ -57,7 +57,7 @@ export async function GET() {
       locationCity: row.location_city ?? undefined,
     }));
 
-    return NextResponse.json({ points });
+    return NextResponse.json({ points }, { headers: { "Cache-Control": "private, max-age=60" } });
   } catch (error) {
     console.error("Error in geo media endpoint:", error);
     return NextResponse.json(
