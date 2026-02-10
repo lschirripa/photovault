@@ -114,7 +114,7 @@ export async function GET(
       assets: orderedAssets,
       hasMore,
       nextCursor,
-    });
+    }, { headers: { "Cache-Control": "private, max-age=60" } });
   } catch (error) {
     console.error("Person media error:", error);
     return NextResponse.json(

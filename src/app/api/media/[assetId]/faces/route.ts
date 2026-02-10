@@ -56,7 +56,7 @@ export async function GET(
     if (facesError) throw facesError;
 
     if (!faces || faces.length === 0) {
-      return NextResponse.json({ faces: [] });
+      return NextResponse.json({ faces: [] }, { headers: { "Cache-Control": "private, max-age=60" } });
     }
 
     // Fetch person names for all faces that have a person_id
@@ -101,7 +101,7 @@ export async function GET(
       })
     );
 
-    return NextResponse.json({ faces: response });
+    return NextResponse.json({ faces: response }, { headers: { "Cache-Control": "private, max-age=60" } });
   } catch (error) {
     console.error("Get faces error:", error);
     return NextResponse.json(

@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    return NextResponse.json({ persons: response });
+    return NextResponse.json({ persons: response }, { headers: { "Cache-Control": "private, max-age=60" } });
   } catch (error) {
     console.error("List persons error:", error);
     return NextResponse.json(
