@@ -124,7 +124,19 @@ export function useGroups() {
         return b.createdAt.getTime() - a.createdAt.getTime();
       });
 
-      setGroups(result);
+      setGroups((prev) => {
+        const prevIds = prev.map((g) => g.id).join(",");
+        const nextIds = result.map((g) => g.id).join(",");
+        if (prevIds === nextIds) {
+          const changed = result.some(
+            (g, i) =>
+              g.updatedAt.getTime() !== prev[i]?.updatedAt.getTime() ||
+              g.coverMediaId !== prev[i]?.coverMediaId
+          );
+          if (!changed) return prev;
+        }
+        return result;
+      });
       return result;
     } catch (err) {
       const message =

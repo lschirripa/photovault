@@ -41,7 +41,11 @@ export function usePinnedGroup() {
           error: Error | null;
         };
 
-        setPinnedMediaIds((mediaRows ?? []).map((r) => r.id));
+        setPinnedMediaIds((prev) => {
+          const next = (mediaRows ?? []).map((r: { id: string }) => r.id);
+          if (prev.length === next.length && prev.every((id, i) => id === next[i])) return prev;
+          return next;
+        });
       } else {
         setPinnedMediaIds([]);
       }
@@ -72,7 +76,11 @@ export function usePinnedGroup() {
           data: { id: string }[] | null;
           error: Error | null;
         };
-        setPinnedMediaIds((mediaRows ?? []).map((r) => r.id));
+        setPinnedMediaIds((prev) => {
+          const next = (mediaRows ?? []).map((r: { id: string }) => r.id);
+          if (prev.length === next.length && prev.every((id, i) => id === next[i])) return prev;
+          return next;
+        });
       }
     },
     [supabase]
