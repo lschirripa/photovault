@@ -39,6 +39,12 @@ export const env = {
     appId: process.env.NEXT_PUBLIC_GOOGLE_APP_ID ?? "",
   },
 
+  // Upstash Redis (optional — enables rate limiting + caching)
+  redis: {
+    url: serverEnv("UPSTASH_REDIS_REST_URL", false),
+    token: serverEnv("UPSTASH_REDIS_REST_TOKEN", false),
+  },
+
   // Runtime checks
   isServer: typeof window === "undefined",
   isDev: process.env.NODE_ENV === "development",

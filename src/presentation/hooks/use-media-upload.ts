@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMediaTypeFromMime } from "@/domain/enums/media-type";
 import { captureVideoFrame } from "@/presentation/utils/capture-video-frame";
 
@@ -146,6 +146,28 @@ export function useMediaUpload(groupId: string) {
 
   // Store file references for manual retry
   const fileMapRef = useRef<Map<string, File>>(new Map());
+
+  // Clear all file references on unmount to prevent memory leaks
+  useEffect(() => {
+    const ref = fileMapRef.current;
+    return () => {
+      ref.clear();
+    };
+  }, []);
+
+  // Safety net: purge file refs for completed/errored uploads every 30 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      for (const [fileId] of fileMapRef.current) {
+        const upload = uploads.get(fileId);
+        if (!upload || upload.status === "complete" || upload.status === "error") {
+          fileMapRef.current.delete(fileId);
+        }
+      }
+    }, 30 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [uploads]);
 
   const updateUpload = useCallback(
     (fileId: string, updates: Partial<UploadProgress>) => {
@@ -297,8 +319,11 @@ export function useMediaUpload(groupId: string) {
                   uploadedThumbnailKey = presignData.thumbnailKey;
                 }
               }
-            } catch {
-              // Non-blocking — video uploads normally without thumbnail
+            } catch (thumbErr) {
+              console.warn(
+                `Video thumbnail capture failed for ${file.name}:`,
+                thumbErr instanceof Error ? thumbErr.message : thumbErr
+              );
             }
           }
 
@@ -346,6 +371,8 @@ export function useMediaUpload(groupId: string) {
             const message =
               err instanceof Error ? err.message : "Upload failed";
             updateUpload(fileId, { status: "error", error: message });
+            // Clear file reference after max retries to prevent memory leak
+            fileMapRef.current.delete(fileId);
             throw err;
           }
           // Will retry on next iteration

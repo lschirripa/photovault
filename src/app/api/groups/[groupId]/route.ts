@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerComponentClient } from "@/infrastructure/supabase/server";
 import { getStorageService } from "@/infrastructure/cloudflare/r2-storage-service";
+import { GROUP_DELETE_BATCH_SIZE, GROUP_DELETE_TIME_BUDGET_MS } from "@/infrastructure/config/limits";
+import { cacheDelete } from "@/infrastructure/redis/cache";
 import type { Tables } from "@/types/supabase";
 
 interface RouteParams {
@@ -101,6 +103,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
     }
 
+    // Invalidate cached group metadata
+    await cacheDelete(`group:${groupId}`);
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error("Update group error:", error);
@@ -145,44 +150,56 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Get all media assets for this group
-    const { data: assets, error: assetsError } = (await supabase
-      .from("media_assets")
-      .select("original_key, thumbnail_key")
-      .eq("group_id", groupId)) as unknown as {
-      data: Pick<Tables<"media_assets">, "original_key" | "thumbnail_key">[] | null;
-      error: Error | null;
-    };
+    // Paginated R2 cleanup with time budget — delete as many objects as possible
+    // within the budget, then cascade-delete the group from DB. Any remaining
+    // R2 orphans are cleaned up by the hourly cron.
+    const storageService = getStorageService();
+    const deadline = Date.now() + GROUP_DELETE_TIME_BUDGET_MS;
+    let offset = 0;
+    let deletedKeys = 0;
 
-    if (assetsError) {
-      console.error("Failed to fetch group assets:", assetsError);
-      return NextResponse.json(
-        { error: "Failed to fetch group assets" },
-        { status: 500 }
-      );
-    }
+    try {
+      while (Date.now() < deadline) {
+        const { data: assets, error: assetsError } = (await supabase
+          .from("media_assets")
+          .select("original_key, thumbnail_key")
+          .eq("group_id", groupId)
+          .range(offset, offset + GROUP_DELETE_BATCH_SIZE - 1)) as unknown as {
+          data: Pick<Tables<"media_assets">, "original_key" | "thumbnail_key">[] | null;
+          error: Error | null;
+        };
 
-    // Collect all R2 keys to delete
-    const keysToDelete: string[] = [];
-    if (assets) {
-      for (const asset of assets) {
-        keysToDelete.push(asset.original_key);
-        if (asset.thumbnail_key) {
-          keysToDelete.push(asset.thumbnail_key);
+        if (assetsError) {
+          console.error("Failed to fetch group assets page:", assetsError);
+          break;
         }
+
+        if (!assets || assets.length === 0) break;
+
+        const keysToDelete: string[] = [];
+        for (const asset of assets) {
+          keysToDelete.push(asset.original_key);
+          if (asset.thumbnail_key) {
+            keysToDelete.push(asset.thumbnail_key);
+          }
+        }
+
+        if (keysToDelete.length > 0) {
+          await storageService.deleteObjects(keysToDelete);
+          deletedKeys += keysToDelete.length;
+        }
+
+        // If we got fewer than a full page, we're done
+        if (assets.length < GROUP_DELETE_BATCH_SIZE) break;
+        offset += GROUP_DELETE_BATCH_SIZE;
       }
+    } catch (storageError) {
+      console.error("Failed to delete R2 objects:", storageError);
+      // Continue with database deletion — cron will clean up orphans
     }
 
-    // Delete files from R2 storage
-    if (keysToDelete.length > 0) {
-      const storageService = getStorageService();
-      try {
-        await storageService.deleteObjects(keysToDelete);
-      } catch (storageError) {
-        console.error("Failed to delete R2 objects:", storageError);
-        // Continue with database deletion even if R2 cleanup fails
-        // The orphaned files can be cleaned up later
-      }
+    if (deletedKeys > 0) {
+      console.log(`Group ${groupId}: deleted ${deletedKeys} R2 keys before DB cascade`);
     }
 
     // Delete the group from the database
@@ -199,6 +216,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         { status: 500 }
       );
     }
+
+    // Invalidate cached group metadata
+    await cacheDelete(`group:${groupId}`);
 
     return NextResponse.json({ success: true });
   } catch (error) {

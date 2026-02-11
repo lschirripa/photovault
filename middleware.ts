@@ -44,7 +44,9 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder files (images, etc)
+     * - api/webhooks/* (use service role keys, not user sessions)
+     * - api/admin/* (use service role keys or cron secret)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|api/admin|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

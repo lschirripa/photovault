@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerComponentClient } from "@/infrastructure/supabase/server";
 import { getStorageService } from "@/infrastructure/cloudflare/r2-storage-service";
-import { getMediaTypeFromMime } from "@/domain/enums/media-type";
+import { getMediaTypeFromMime, MediaType } from "@/domain/enums/media-type";
 import { PresignUploadRequestDTO, PresignUploadResponseDTO } from "@/application/dto/media-dto";
+import { MAX_IMAGE_UPLOAD_SIZE, MAX_VIDEO_UPLOAD_SIZE } from "@/infrastructure/config/limits";
+import { getUploadLimiter } from "@/infrastructure/redis/rate-limit";
+import { checkRateLimit } from "@/infrastructure/redis/with-rate-limit";
 import type { Tables } from "@/types/supabase";
+
+/** Map of valid file extensions to their expected MIME types */
+const EXTENSION_MIME_MAP: Record<string, string[]> = {
+  jpg: ["image/jpeg"],
+  jpeg: ["image/jpeg"],
+  png: ["image/png"],
+  gif: ["image/gif"],
+  webp: ["image/webp"],
+  heic: ["image/heic"],
+  heif: ["image/heif"],
+  mp4: ["video/mp4"],
+  mov: ["video/quicktime"],
+  webm: ["video/webm"],
+  avi: ["video/x-msvideo"],
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +37,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Rate limit
+    const rateLimited = await checkRateLimit(getUploadLimiter(), user.id);
+    if (rateLimited) return rateLimited;
+
     const body: PresignUploadRequestDTO = await request.json();
     const { groupId, filename, contentType, sizeBytes } = body;
 
@@ -27,6 +49,28 @@ export async function POST(request: NextRequest) {
     if (!mediaType) {
       return NextResponse.json(
         { error: "Unsupported media type" },
+        { status: 400 }
+      );
+    }
+
+    // Validate file extension matches claimed MIME type
+    const ext = filename.split(".").pop()?.toLowerCase();
+    if (ext) {
+      const allowedMimes = EXTENSION_MIME_MAP[ext];
+      if (allowedMimes && !allowedMimes.includes(contentType)) {
+        return NextResponse.json(
+          { error: `File extension .${ext} does not match content type ${contentType}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate upload size
+    const maxSize = mediaType === MediaType.IMAGE ? MAX_IMAGE_UPLOAD_SIZE : MAX_VIDEO_UPLOAD_SIZE;
+    if (sizeBytes > maxSize) {
+      const maxMB = Math.round(maxSize / (1024 * 1024));
+      return NextResponse.json(
+        { error: `File too large. Maximum ${mediaType} upload size is ${maxMB}MB` },
         { status: 400 }
       );
     }

@@ -1,4 +1,4 @@
-const TIMEOUT_MS = 10_000;
+const TIMEOUT_MS = 15_000;
 const MAX_WIDTH = 400;
 const JPEG_QUALITY = 0.8;
 const SEEK_TIME = 1; // seconds
@@ -32,6 +32,20 @@ export function captureVideoFrame(file: File): Promise<Blob | null> {
       URL.revokeObjectURL(url);
     }
 
+    let retried = false;
+
+    function isBlankFrame(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
+      // Sample a small region to detect all-black frames
+      const sampleSize = Math.min(32, width, height);
+      const imageData = ctx.getImageData(0, 0, sampleSize, sampleSize);
+      let totalBrightness = 0;
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        totalBrightness += imageData.data[i] + imageData.data[i + 1] + imageData.data[i + 2];
+      }
+      const avgBrightness = totalBrightness / (sampleSize * sampleSize * 3);
+      return avgBrightness < 5;
+    }
+
     function captureFrame() {
       try {
         if (video.videoWidth === 0 || video.videoHeight === 0) {
@@ -53,6 +67,14 @@ export function captureVideoFrame(file: File): Promise<Blob | null> {
         }
 
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // If frame is blank/black and we haven't retried, seek to 50% of duration
+        if (!retried && isBlankFrame(ctx, canvas.width, canvas.height)) {
+          retried = true;
+          video.currentTime = video.duration * 0.5;
+          return; // onseeked will fire captureFrame again
+        }
+
         canvas.toBlob(
           (blob) => {
             cleanup();

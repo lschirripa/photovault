@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerComponentClient } from "@/infrastructure/supabase/server";
 import { getStorageService } from "@/infrastructure/cloudflare/r2-storage-service";
+import { getStandardLimiter } from "@/infrastructure/redis/rate-limit";
+import { checkRateLimit } from "@/infrastructure/redis/with-rate-limit";
 import type { Tables } from "@/types/supabase";
 
 export async function GET(request: NextRequest) {
@@ -16,6 +18,10 @@ export async function GET(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Rate limit
+    const rateLimited = await checkRateLimit(getStandardLimiter(), user.id);
+    if (rateLimited) return rateLimited;
 
     const assetId = request.nextUrl.searchParams.get("assetId");
 

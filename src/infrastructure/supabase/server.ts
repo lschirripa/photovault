@@ -5,6 +5,10 @@ import type { Database } from "@/types/supabase";
 
 type TypedSupabaseClient = ReturnType<typeof createSupabaseClient<Database>>;
 
+// Note on connection pooling:
+// Supabase JS uses HTTP/REST (PostgREST) under the hood — not persistent PG connections.
+// Creating a new client per request is lightweight (no TCP connection overhead).
+// For direct SQL access, use the PgBouncer pooler on port 6543 instead of 5432.
 export async function createServerComponentClient(): Promise<TypedSupabaseClient> {
   const cookieStore = await cookies();
 

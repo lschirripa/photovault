@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerComponentClient } from "@/infrastructure/supabase/server";
 import { ConfirmUploadRequestDTO } from "@/application/dto/media-dto";
+import { getUploadLimiter } from "@/infrastructure/redis/rate-limit";
+import { checkRateLimit } from "@/infrastructure/redis/with-rate-limit";
 import type { Tables } from "@/types/supabase";
 
 export async function POST(request: NextRequest) {
@@ -16,6 +18,10 @@ export async function POST(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Rate limit
+    const rateLimited = await checkRateLimit(getUploadLimiter(), user.id);
+    if (rateLimited) return rateLimited;
 
     const body: ConfirmUploadRequestDTO = await request.json();
     const { assetId, width, height, durationSeconds, thumbnailKey } = body;

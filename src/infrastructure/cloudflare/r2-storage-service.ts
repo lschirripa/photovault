@@ -13,6 +13,7 @@ import {
   UploadOptions,
 } from "@/application/services/storage-service";
 import { env } from "@/infrastructure/config/env";
+import { R2_DELETE_BATCH_SIZE } from "@/infrastructure/config/limits";
 
 export class R2StorageService implements IStorageService {
   private client: S3Client;
@@ -75,14 +76,18 @@ export class R2StorageService implements IStorageService {
   async deleteObjects(keys: string[]): Promise<void> {
     if (keys.length === 0) return;
 
-    const command = new DeleteObjectsCommand({
-      Bucket: this.bucketName,
-      Delete: {
-        Objects: keys.map((key) => ({ Key: key })),
-      },
-    });
+    // R2/S3 limits DeleteObjects to 1000 keys per request — chunk accordingly
+    for (let i = 0; i < keys.length; i += R2_DELETE_BATCH_SIZE) {
+      const batch = keys.slice(i, i + R2_DELETE_BATCH_SIZE);
+      const command = new DeleteObjectsCommand({
+        Bucket: this.bucketName,
+        Delete: {
+          Objects: batch.map((key) => ({ Key: key })),
+        },
+      });
 
-    await this.client.send(command);
+      await this.client.send(command);
+    }
   }
 
   async objectExists(key: string): Promise<boolean> {

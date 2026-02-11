@@ -5,6 +5,9 @@ import {
   extractMetadata,
   supportsMetadataExtraction,
 } from "@/infrastructure/services/metadata-extraction-service";
+import { THUMBNAIL_MAX_FILE_SIZE } from "@/infrastructure/config/limits";
+import { getWebhookLimiter } from "@/infrastructure/redis/rate-limit";
+import { checkRateLimit } from "@/infrastructure/redis/with-rate-limit";
 import type { Tables } from "@/types/supabase";
 
 export async function POST(request: NextRequest) {
@@ -14,6 +17,10 @@ export async function POST(request: NextRequest) {
     if (!assetId) {
       return NextResponse.json({ error: "Missing assetId" }, { status: 400 });
     }
+
+    // Rate limit per asset
+    const rateLimited = await checkRateLimit(getWebhookLimiter(), `asset:${assetId}`);
+    if (rateLimited) return rateLimited;
 
     const supabase = createServiceClient();
 
@@ -39,6 +46,62 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, thumbnail: false });
     }
 
+    // File size guard: skip thumbnail for very large files to prevent OOM
+    if (asset.size_bytes && asset.size_bytes > THUMBNAIL_MAX_FILE_SIZE) {
+      console.warn(
+        `Skipping thumbnail for asset ${assetId}: ${asset.size_bytes} bytes exceeds ${THUMBNAIL_MAX_FILE_SIZE} limit`
+      );
+
+      // Still extract EXIF (reads only header bytes, very lightweight)
+      let metadataUpdate: Record<string, unknown> = {};
+      if (supportsMetadataExtraction(asset.media_type)) {
+        try {
+          const storageService = getStorageService();
+          const originalUrl = await storageService.generateDownloadUrl(asset.original_key);
+          // Fetch only the first 256KB for EXIF extraction
+          const headResponse = await fetch(originalUrl, {
+            headers: { Range: "bytes=0-262143" },
+          });
+          if (headResponse.ok) {
+            const headBuffer = Buffer.from(await headResponse.arrayBuffer());
+            const metadata = await extractMetadata(headBuffer);
+            metadataUpdate = {
+              date_taken: metadata.dateTaken?.toISOString() ?? null,
+              latitude: metadata.latitude,
+              longitude: metadata.longitude,
+              altitude: metadata.altitude,
+              camera_make: metadata.cameraMake,
+              camera_model: metadata.cameraModel,
+              lens_model: metadata.lensModel,
+              iso: metadata.iso,
+              f_number: metadata.fNumber,
+              exposure_time: metadata.exposureTime,
+              focal_length: metadata.focalLength,
+              orientation: metadata.orientation,
+              location_country: metadata.locationCountry,
+              location_state: metadata.locationState,
+              location_city: metadata.locationCity,
+            };
+          }
+        } catch (metadataError) {
+          console.error("Failed to extract metadata for oversized asset:", metadataError);
+        }
+      }
+
+      await supabase
+        .from("media_assets")
+        .update({ status: "ready", ...metadataUpdate })
+        .eq("id", assetId);
+
+      // Enqueue face detection even without thumbnail
+      await supabase.from("face_jobs").insert({
+        media_asset_id: assetId,
+        group_id: asset.group_id,
+      });
+
+      return NextResponse.json({ success: true, thumbnail: false, reason: "oversized" });
+    }
+
     try {
       const storageService = getStorageService();
 
@@ -53,11 +116,45 @@ export async function POST(request: NextRequest) {
         throw new Error("Failed to fetch original image");
       }
 
-      const imageBuffer = Buffer.from(await response.arrayBuffer());
+      let imageBuffer: Buffer | null = Buffer.from(await response.arrayBuffer());
+
+      // Extract EXIF first (reads header bytes only, very fast) before Sharp processing
+      let metadataUpdate: Record<string, unknown> = {};
+      if (supportsMetadataExtraction(asset.media_type)) {
+        try {
+          const metadata = await extractMetadata(imageBuffer);
+          metadataUpdate = {
+            date_taken: metadata.dateTaken?.toISOString() ?? null,
+            latitude: metadata.latitude,
+            longitude: metadata.longitude,
+            altitude: metadata.altitude,
+            camera_make: metadata.cameraMake,
+            camera_model: metadata.cameraModel,
+            lens_model: metadata.lensModel,
+            iso: metadata.iso,
+            f_number: metadata.fNumber,
+            exposure_time: metadata.exposureTime,
+            focal_length: metadata.focalLength,
+            orientation: metadata.orientation,
+            location_country: metadata.locationCountry,
+            location_state: metadata.locationState,
+            location_city: metadata.locationCity,
+          };
+        } catch (metadataError) {
+          console.error("Failed to extract metadata:", metadataError);
+        }
+      }
 
       // Generate thumbnail using sharp (dynamic import for edge compatibility)
+      // Reuse a single Sharp instance and clone for HEIC web version to cut peak memory
       const sharp = (await import("sharp")).default;
-      const thumbnailBuffer = await sharp(imageBuffer)
+      const isHeic = asset.mime_type === "image/heic" || asset.mime_type === "image/heif";
+
+      const sharpInstance = sharp(imageBuffer);
+
+      // Generate thumbnail from clone
+      const thumbnailBuffer = await sharpInstance
+        .clone()
         .resize(400, 400, {
           fit: "inside",
           withoutEnlargement: true,
@@ -89,10 +186,10 @@ export async function POST(request: NextRequest) {
         throw new Error("Failed to upload thumbnail");
       }
 
-      // For HEIC/HEIF: generate a web-compatible JPEG version at full resolution
-      const isHeic = asset.mime_type === "image/heic" || asset.mime_type === "image/heif";
+      // For HEIC/HEIF: generate a web-compatible JPEG version from the same Sharp instance
       if (isHeic) {
-        const webBuffer = await sharp(imageBuffer)
+        const webBuffer = await sharpInstance
+          .clone()
           .jpeg({ quality: 90 })
           .toBuffer();
 
@@ -120,32 +217,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Extract EXIF metadata from the image buffer
-      let metadataUpdate: Record<string, unknown> = {};
-      if (supportsMetadataExtraction(asset.media_type)) {
-        try {
-          const metadata = await extractMetadata(imageBuffer);
-          metadataUpdate = {
-            date_taken: metadata.dateTaken?.toISOString() ?? null,
-            latitude: metadata.latitude,
-            longitude: metadata.longitude,
-            altitude: metadata.altitude,
-            camera_make: metadata.cameraMake,
-            camera_model: metadata.cameraModel,
-            lens_model: metadata.lensModel,
-            iso: metadata.iso,
-            f_number: metadata.fNumber,
-            exposure_time: metadata.exposureTime,
-            focal_length: metadata.focalLength,
-            orientation: metadata.orientation,
-            location_country: metadata.locationCountry,
-            location_state: metadata.locationState,
-            location_city: metadata.locationCity,
-          };
-        } catch (metadataError) {
-          console.error("Failed to extract metadata:", metadataError);
-        }
-      }
+      // Release buffer reference so GC can reclaim during DB update
+      imageBuffer = null;
 
       // Update asset with thumbnail key, metadata, and ready status
       await supabase
