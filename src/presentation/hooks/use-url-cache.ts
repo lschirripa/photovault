@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 
 const TTL_MS = 45 * 60 * 1000; // 45 minutes
+const MAX_CACHE_SIZE = 500;
 
 interface CacheEntry {
   url: string;
@@ -12,12 +13,18 @@ interface CacheEntry {
 // Global cache shared across all components/pages — survives navigation
 const cache = new Map<string, CacheEntry>();
 
+// In-flight request deduplication — prevents duplicate fetches for the same set of IDs
+const inflight = new Map<string, Promise<Record<string, string>>>();
+
 /** Build a cache key from assetId + type */
 function cacheKey(assetId: string, type: "thumbnail" | "original"): string {
   return `${type}:${assetId}`;
 }
 
-function getFromCache(assetId: string, type: "thumbnail" | "original"): string | undefined {
+function getFromCache(
+  assetId: string,
+  type: "thumbnail" | "original",
+): string | undefined {
   const entry = cache.get(cacheKey(assetId, type));
   if (!entry) return undefined;
   if (Date.now() > entry.expiresAt) {
@@ -27,8 +34,25 @@ function getFromCache(assetId: string, type: "thumbnail" | "original"): string |
   return entry.url;
 }
 
-function setInCache(assetId: string, type: "thumbnail" | "original", url: string): void {
-  cache.set(cacheKey(assetId, type), { url, expiresAt: Date.now() + TTL_MS });
+function setInCache(
+  assetId: string,
+  type: "thumbnail" | "original",
+  url: string,
+): void {
+  const key = cacheKey(assetId, type);
+  // Delete first so re-insertion moves the key to the end (most-recently-used)
+  cache.delete(key);
+  cache.set(key, { url, expiresAt: Date.now() + TTL_MS });
+
+  // LRU eviction: remove oldest entries (head of Map iterator) when over limit
+  if (cache.size > MAX_CACHE_SIZE) {
+    const keysIter = cache.keys();
+    while (cache.size > MAX_CACHE_SIZE) {
+      const oldest = keysIter.next();
+      if (oldest.done) break;
+      cache.delete(oldest.value);
+    }
+  }
 }
 
 /**
@@ -43,7 +67,7 @@ export function useUrlCache() {
     (assetId: string, type: "thumbnail" | "original"): string | undefined => {
       return getFromCache(assetId, type);
     },
-    []
+    [],
   );
 
   /**
@@ -54,7 +78,7 @@ export function useUrlCache() {
   const fetchUrls = useCallback(
     async (
       assetIds: string[],
-      type: "thumbnail" | "original"
+      type: "thumbnail" | "original",
     ): Promise<Record<string, string>> => {
       const result: Record<string, string> = {};
       const uncached: string[] = [];
@@ -70,28 +94,44 @@ export function useUrlCache() {
 
       if (uncached.length === 0) return result;
 
-      // Fetch only the uncached IDs from the server
-      try {
-        const response = await fetch("/api/media/urls", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assetIds: uncached, type }),
-        });
-        if (response.ok) {
-          const data = await response.json();
-          const urls: Record<string, string> = data.urls || {};
-          for (const [id, url] of Object.entries(urls)) {
-            setInCache(id, type, url);
-            result[id] = url;
+      // Build a stable key from sorted uncached IDs + type for deduplication
+      const inflightKey = `${type}:${[...uncached].sort().join(",")}`;
+
+      // Reuse an identical in-flight request if one already exists
+      let fetchPromise = inflight.get(inflightKey);
+
+      if (!fetchPromise) {
+        fetchPromise = (async (): Promise<Record<string, string>> => {
+          const response = await fetch("/api/media/urls", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assetIds: uncached, type }),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            return (data.urls as Record<string, string>) || {};
           }
+          return {};
+        })();
+
+        inflight.set(inflightKey, fetchPromise);
+      }
+
+      try {
+        const urls = await fetchPromise;
+        for (const [id, url] of Object.entries(urls)) {
+          setInCache(id, type, url);
+          result[id] = url;
         }
-      } catch {
-        // Silently fail — callers handle missing URLs gracefully
+      } catch (err) {
+        console.warn("[useUrlCache] Failed to fetch URLs:", err);
+      } finally {
+        inflight.delete(inflightKey);
       }
 
       return result;
     },
-    []
+    [],
   );
 
   /**
@@ -100,7 +140,7 @@ export function useUrlCache() {
   const fetchUrl = useCallback(
     async (
       assetId: string,
-      type: "thumbnail" | "original"
+      type: "thumbnail" | "original",
     ): Promise<string | null> => {
       const cached = getFromCache(assetId, type);
       if (cached) return cached;
@@ -108,7 +148,7 @@ export function useUrlCache() {
       const result = await fetchUrls([assetId], type);
       return result[assetId] ?? null;
     },
-    [fetchUrls]
+    [fetchUrls],
   );
 
   return { getCachedUrl, fetchUrls, fetchUrl };

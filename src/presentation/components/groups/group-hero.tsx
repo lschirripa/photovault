@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { GroupWithStats } from "@/domain/entities/group";
@@ -12,7 +13,7 @@ interface GroupHeroProps {
   onUnpin: () => void;
 }
 
-export function GroupHero({ group, thumbnailUrls, recentMediaIds, onUnpin }: GroupHeroProps) {
+function GroupHeroInner({ group, thumbnailUrls, recentMediaIds, onUnpin }: GroupHeroProps) {
   const photoIds = recentMediaIds.slice(0, 4);
 
   return (
@@ -83,3 +84,6 @@ export function GroupHero({ group, thumbnailUrls, recentMediaIds, onUnpin }: Gro
     </div>
   );
 }
+
+export const GroupHero = memo(GroupHeroInner);
+GroupHero.displayName = "GroupHero";

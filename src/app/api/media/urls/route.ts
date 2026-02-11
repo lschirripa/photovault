@@ -3,7 +3,10 @@ import { createServerComponentClient } from "@/infrastructure/supabase/server";
 import { getStorageService } from "@/infrastructure/cloudflare/r2-storage-service";
 import { getStandardLimiter } from "@/infrastructure/redis/rate-limit";
 import { checkRateLimit } from "@/infrastructure/redis/with-rate-limit";
+import { cacheGet, cacheSet } from "@/infrastructure/redis/cache";
 import type { Tables } from "@/types/supabase";
+
+const URL_CACHE_TTL = 2700; // 45 minutes, matches Cache-Control header
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,32 +68,74 @@ export async function POST(request: NextRequest) {
 
     const storageService = getStorageService();
 
-    // Generate all presigned URLs in parallel
-    const urlEntries = await Promise.all(
-      assets.map(async (asset) => {
-        let key: string;
-        if (type === "original") {
-          const isHeic =
-            asset.mime_type === "image/heic" ||
-            asset.mime_type === "image/heif";
-          if (isHeic) {
-            key = asset.original_key.replace(
-              /\/([^/]+)\.[^.]+$/,
-              "/web_$1.jpg"
-            );
-          } else {
-            key = asset.original_key;
-          }
+    // Resolve storage keys for each asset (HEIC/HEIF rewriting + type selection)
+    const assetKeys = assets.map((asset) => {
+      let storageKey: string;
+      if (type === "original") {
+        const isHeic =
+          asset.mime_type === "image/heic" ||
+          asset.mime_type === "image/heif";
+        if (isHeic) {
+          storageKey = asset.original_key.replace(
+            /\/([^/]+)\.[^.]+$/,
+            "/web_$1.jpg"
+          );
         } else {
-          key = asset.thumbnail_key || asset.original_key;
+          storageKey = asset.original_key;
         }
+      } else {
+        storageKey = asset.thumbnail_key || asset.original_key;
+      }
+      return { id: asset.id, storageKey };
+    });
 
-        const url = await storageService.generateDownloadUrl(key);
-        return [asset.id, url] as const;
+    // Check Redis cache for existing presigned URLs
+    let cachedUrls: Record<string, string> = {};
+    try {
+      const cacheResults = await Promise.all(
+        assetKeys.map(async ({ id, storageKey }) => {
+          const cacheKey = `url:${type}:${storageKey}`;
+          const cached = await cacheGet<string>(cacheKey);
+          return { id, storageKey, cached };
+        })
+      );
+
+      for (const { id, cached } of cacheResults) {
+        if (cached) {
+          cachedUrls[id] = cached;
+        }
+      }
+    } catch {
+      // Redis unavailable — proceed without cache
+      cachedUrls = {};
+    }
+
+    // Generate presigned URLs only for cache misses
+    const missedAssets = assetKeys.filter(({ id }) => !cachedUrls[id]);
+
+    const freshEntries = await Promise.all(
+      missedAssets.map(async ({ id, storageKey }) => {
+        const url = await storageService.generateDownloadUrl(storageKey);
+        return { id, storageKey, url };
       })
     );
 
-    const urls: Record<string, string> = Object.fromEntries(urlEntries);
+    // Store freshly generated URLs in Redis (fire-and-forget, wrapped in try/catch)
+    try {
+      await Promise.all(
+        freshEntries.map(({ storageKey, url }) =>
+          cacheSet(`url:${type}:${storageKey}`, url, URL_CACHE_TTL)
+        )
+      );
+    } catch {
+      // Redis unavailable — continue without caching
+    }
+
+    // Merge cached + fresh URLs
+    const urls: Record<string, string> = { ...cachedUrls };
+    for (const { id, url } of freshEntries) {
+      urls[id] = url;
+    }
 
     return NextResponse.json(
       { urls },
