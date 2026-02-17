@@ -18,6 +18,7 @@ export function UploadRow({
   onRetry: (fileId: string) => void;
   onRemove: (fileId: string) => void;
 }) {
+  const isQueued = upload.status === "queued";
   const isActive = upload.status === "uploading" || upload.status === "retrying";
   const isError = upload.status === "error";
   const isComplete = upload.status === "complete";
@@ -37,7 +38,9 @@ export function UploadRow({
       ? "\u2713"
       : upload.status === "retrying"
         ? "\u21BB"
-        : null;
+        : isQueued
+          ? "\u2022"
+          : null;
 
   return (
     <div
@@ -54,7 +57,7 @@ export function UploadRow({
         {/* Status icon */}
         <span className="flex-shrink-0 w-5 text-center">
           {statusIcon ? (
-            <span className={isError ? "text-red-500" : isComplete ? "text-green-600" : "text-yellow-500"}>
+            <span className={isError ? "text-red-500" : isComplete ? "text-green-600" : isQueued ? "text-gray-400" : "text-yellow-500"}>
               {statusIcon}
             </span>
           ) : (
@@ -79,6 +82,7 @@ export function UploadRow({
                 )}
                 {upload.status === "processing" && <span>Processing...</span>}
                 {upload.status === "pending" && <span>Waiting...</span>}
+                {upload.status === "queued" && <span>Queued</span>}
               </>
             )}
           </div>

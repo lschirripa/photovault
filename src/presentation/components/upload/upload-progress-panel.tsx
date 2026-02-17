@@ -33,7 +33,7 @@ export function UploadProgressPanel({
   const completedCount = uploads.filter((u) => u.status === "complete").length;
   const failedCount = uploads.filter((u) => u.status === "error").length;
   const activeUploads = uploads.filter(
-    (u) => u.status === "uploading" || u.status === "retrying" || u.status === "pending" || u.status === "processing"
+    (u) => u.status === "queued" || u.status === "uploading" || u.status === "retrying" || u.status === "pending" || u.status === "processing"
   );
   const isActive = activeUploads.length > 0;
 

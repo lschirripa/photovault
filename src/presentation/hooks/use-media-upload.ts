@@ -51,7 +51,7 @@ export interface UploadProgress {
   fileId: string;
   filename: string;
   progress: number;
-  status: "pending" | "uploading" | "processing" | "complete" | "error" | "retrying";
+  status: "queued" | "pending" | "uploading" | "processing" | "complete" | "error" | "retrying";
   retryCount: number;
   error?: string;
   bytesLoaded?: number;
@@ -391,11 +391,31 @@ export function useMediaUpload(groupId: string) {
       const results: string[] = [];
       const concurrencyLimit = getOptimalConcurrency();
 
+      // Pre-seed all files into the uploads map so total count is accurate
+      const fileIds = files.map(() => generateUUID());
+      setUploads((prev) => {
+        const next = new Map(prev);
+        files.forEach((file, idx) => {
+          next.set(fileIds[idx], {
+            fileId: fileIds[idx],
+            filename: file.name,
+            progress: 0,
+            status: "queued",
+            retryCount: 0,
+            bytesLoaded: 0,
+            bytesTotal: file.size,
+          });
+          fileMapRef.current.set(fileIds[idx], file);
+        });
+        return next;
+      });
+
       // Process files in batches of `concurrencyLimit`
       for (let i = 0; i < files.length; i += concurrencyLimit) {
         const batch = files.slice(i, i + concurrencyLimit);
+        const batchFileIds = fileIds.slice(i, i + concurrencyLimit);
         const batchResults = await Promise.allSettled(
-          batch.map((file) => uploadFile(file))
+          batch.map((file, idx) => uploadFile(file, batchFileIds[idx]))
         );
 
         for (const result of batchResults) {
@@ -447,6 +467,7 @@ export function useMediaUpload(groupId: string) {
   const isUploading = useMemo(() => {
     return Array.from(uploads.values()).some(
       (u) =>
+        u.status === "queued" ||
         u.status === "pending" ||
         u.status === "uploading" ||
         u.status === "processing" ||
