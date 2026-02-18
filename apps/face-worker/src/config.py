@@ -14,11 +14,16 @@ R2_ENDPOINT_URL = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 # Worker tuning
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "5"))
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "10"))
-COSINE_DISTANCE_THRESHOLD = float(os.environ.get("COSINE_DISTANCE_THRESHOLD", "0.55"))
+COSINE_DISTANCE_THRESHOLD = float(os.environ.get("COSINE_DISTANCE_THRESHOLD", "0.45"))
 
 # InsightFace
 INSIGHTFACE_MODEL = os.environ.get("INSIGHTFACE_MODEL", "buffalo_l")
-MIN_FACE_CONFIDENCE = float(os.environ.get("MIN_FACE_CONFIDENCE", "0.5"))
+MIN_FACE_CONFIDENCE = float(os.environ.get("MIN_FACE_CONFIDENCE", "0.70"))
+
+# Face quality filters (applied at detection time to suppress background noise)
+MIN_FACE_SIZE_PX = int(os.environ.get("MIN_FACE_SIZE_PX", "80"))          # min pixel width/height
+MIN_FACE_AREA_RATIO = float(os.environ.get("MIN_FACE_AREA_RATIO", "0.003"))  # min fraction of image area
+MIN_BLUR_SCORE = float(os.environ.get("MIN_BLUR_SCORE", "80.0"))           # Laplacian variance threshold
 
 # Face crop settings
 FACE_CROP_SIZE = 150        # px, square

@@ -51,7 +51,9 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/persons/[personId] — Dismiss a person cluster
+// DELETE /api/persons/[personId] — Soft-dismiss a person cluster
+// The row is kept so the worker can still match future faces against the centroid
+// and suppress them from the UI. The centroid acts as a "never show again" memory.
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ personId: string }> }
@@ -69,26 +71,20 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Unlink all detected faces from this person (ON DELETE SET NULL handles this,
-    // but explicit for clarity and to handle any future logic)
-    await supabase
-      .from("detected_faces")
-      .update({ person_id: null })
-      .eq("person_id", personId);
-
-    // Delete the person (RLS ensures group membership)
-    const { error: deleteError } = await supabase
+    // Soft dismiss: mark as dismissed rather than deleting.
+    // RLS ensures the user can only update persons in their own groups.
+    const { error: updateError } = await supabase
       .from("persons")
-      .delete()
-      .eq("id", personId);
+      .update({ dismissed: true })
+      .eq("id", personId) as unknown as { error: Error | null };
 
-    if (deleteError) {
+    if (updateError) {
       return NextResponse.json({ error: "Person not found" }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Delete person error:", error);
+    console.error("Dismiss person error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

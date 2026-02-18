@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 from insightface.app import FaceAnalysis
 
-from .config import INSIGHTFACE_MODEL, MIN_FACE_CONFIDENCE
+from .config import INSIGHTFACE_MODEL, MIN_FACE_CONFIDENCE, MIN_FACE_SIZE_PX, MIN_FACE_AREA_RATIO, MIN_BLUR_SCORE
 
 
 @dataclass
@@ -41,6 +41,9 @@ def detect_faces(model: FaceAnalysis, image_bgr: np.ndarray) -> list[DetectedFac
     """
     faces = model.get(image_bgr)
 
+    h, w = image_bgr.shape[:2]
+    img_area = h * w
+
     results: list[DetectedFace] = []
     for face in faces:
         score = float(face.det_score)
@@ -51,9 +54,25 @@ def detect_faces(model: FaceAnalysis, image_bgr: np.ndarray) -> list[DetectedFac
         x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
 
         # Clamp to image bounds
-        h, w = image_bgr.shape[:2]
         x1, y1 = max(0, x1), max(0, y1)
         x2, y2 = min(w, x2), min(h, y2)
+
+        face_w = x2 - x1
+        face_h = y2 - y1
+
+        # Reject faces that are too small in pixel terms (background crowd)
+        if face_w < MIN_FACE_SIZE_PX or face_h < MIN_FACE_SIZE_PX:
+            continue
+
+        # Reject faces that are a tiny fraction of the image area
+        if (face_w * face_h) / img_area < MIN_FACE_AREA_RATIO:
+            continue
+
+        # Reject blurry faces via Laplacian variance on the crop region
+        crop_gray = cv2.cvtColor(image_bgr[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+        blur_score = cv2.Laplacian(crop_gray, cv2.CV_64F).var()
+        if blur_score < MIN_BLUR_SCORE:
+            continue
 
         results.append(
             DetectedFace(

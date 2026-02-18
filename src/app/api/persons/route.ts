@@ -33,11 +33,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not a member of this group" }, { status: 403 });
     }
 
-    // Fetch persons sorted by face count (most photos first)
+    // Fetch persons sorted by face count (most photos first).
+    // Exclude dismissed clusters and singletons (face_count < 2 = background noise).
     const { data: persons, error: personsError } = await supabase
       .from("persons")
       .select("id, name, face_count, representative_face_id, created_at")
       .eq("group_id", groupId)
+      .eq("dismissed", false)
+      .gte("face_count", 2)
       .order("face_count", { ascending: false }) as unknown as {
       data: Array<{
         id: string;
