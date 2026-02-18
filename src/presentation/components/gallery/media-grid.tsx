@@ -16,6 +16,9 @@ interface MediaGridProps {
   onDeleteClick?: (asset: MediaAsset) => void;
   canDelete?: (asset: MediaAsset) => boolean;
   deletingId?: string | null;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 /** Match the Tailwind breakpoints: grid-cols-2 sm:3 md:4 lg:5 */
@@ -46,6 +49,9 @@ export function MediaGrid({
   onDeleteClick,
   canDelete,
   deletingId,
+  hasMore,
+  loadingMore,
+  onLoadMore,
 }: MediaGridProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(2);
@@ -87,6 +93,23 @@ export function MediaGrid({
   useEffect(() => {
     virtualizer.measure();
   }, [columns, gap, virtualizer]);
+
+  // Infinite scroll: observe sentinel inside this scroll container
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!sentinelRef.current || !parentRef.current || !onLoadMore) return;
+    if (!hasMore || loadingMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onLoadMore();
+        }
+      },
+      { root: parentRef.current, rootMargin: "200px" }
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, onLoadMore]);
 
   return (
     <div
@@ -266,6 +289,13 @@ export function MediaGrid({
           );
         })}
       </div>
+      {/* Infinite scroll sentinel — inside the scroll container */}
+      {onLoadMore && <div ref={sentinelRef} className="h-4" />}
+      {loadingMore && (
+        <div className="flex justify-center py-4">
+          <p className="text-sm text-gray-500">Loading more...</p>
+        </div>
+      )}
     </div>
   );
 }

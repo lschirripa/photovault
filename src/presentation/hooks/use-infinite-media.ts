@@ -297,9 +297,9 @@ export function useInfiniteMedia({
   }, [fetchPage]);
 
   const loadMore = useCallback(() => {
-    if (loadingMore || !hasMore) return;
+    if (loading || loadingMore || !hasMore) return;
     fetchPage(cursorRef.current, true);
-  }, [fetchPage, loadingMore, hasMore]);
+  }, [fetchPage, loading, loadingMore, hasMore]);
 
   const refresh = useCallback(() => {
     cursorRef.current = null;

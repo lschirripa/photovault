@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/infrastructure/supabase/browser";
@@ -176,21 +176,7 @@ export default function AlbumDetailPage() {
     }
   }, [lightboxIndex, readyMedia, originalUrls, fetchMediaUrl]);
 
-  // Infinite scroll sentinel
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!sentinelRef.current) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore) {
-          loadMore();
-        }
-      },
-      { rootMargin: "200px" }
-    );
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, loadingMore, loadMore]);
+  // Infinite scroll is handled inside MediaGrid (sentinel inside its scroll container)
 
   const handleRemoveFromAlbum = async (mediaIds: string[]) => {
     setRemoving(true);
@@ -353,14 +339,10 @@ export default function AlbumDetailPage() {
             onDeleteClick={setDeleteTarget}
             canDelete={canDeleteMedia}
             deletingId={deletingId}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            onLoadMore={loadMore}
           />
-          {/* Infinite scroll sentinel */}
-          <div ref={sentinelRef} className="h-4" />
-          {loadingMore && (
-            <div className="flex justify-center py-4">
-              <p className="text-sm text-gray-500">Loading more...</p>
-            </div>
-          )}
         </>
       )}
 
