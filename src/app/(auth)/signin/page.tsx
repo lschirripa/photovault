@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthActions } from "@/presentation/hooks/use-auth";
 import { useAuth } from "@/presentation/providers/auth-provider";
 
@@ -14,18 +14,23 @@ export default function SignInPage() {
     useAuthActions();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawRedirect = searchParams.get("redirect");
+  // Only allow relative paths to prevent open redirects
+  const safeRedirect = rawRedirect?.startsWith("/") ? rawRedirect : null;
+  const destination = safeRedirect ?? "/groups";
 
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace("/groups");
+      router.replace(destination);
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, destination]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await signIn({ email, password });
-      router.push("/groups");
+      router.push(destination);
     } catch {
       // Error is handled by the hook
     }
@@ -34,7 +39,7 @@ export default function SignInPage() {
   const handleMagicLink = async () => {
     if (!email) return;
     try {
-      await signInWithMagicLink(email);
+      await signInWithMagicLink(email, safeRedirect ?? undefined);
       setMagicLinkSent(true);
     } catch {
       // Error is handled by the hook
@@ -43,7 +48,7 @@ export default function SignInPage() {
 
   const handleOAuth = async (provider: "google" | "apple" | "github") => {
     try {
-      await signInWithOAuth(provider);
+      await signInWithOAuth(provider, safeRedirect ?? undefined);
     } catch {
       // Error is handled by the hook
     }
@@ -164,7 +169,10 @@ export default function SignInPage() {
 
         <p className="text-center text-sm text-gray-600 dark:text-gray-400">
           Don&apos;t have an account?{" "}
-          <Link href="/register" className="text-blue-600 hover:underline">
+          <Link
+            href={safeRedirect ? `/register?redirect=${encodeURIComponent(safeRedirect)}` : "/register"}
+            className="text-blue-600 hover:underline"
+          >
             Sign up
           </Link>
         </p>

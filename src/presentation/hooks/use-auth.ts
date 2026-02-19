@@ -8,6 +8,7 @@ interface SignUpInput {
   email: string;
   password: string;
   displayName: string;
+  next?: string;
 }
 
 interface SignInInput {
@@ -22,11 +23,12 @@ export function useAuthActions() {
   const supabase = createClient();
 
   const signUp = useCallback(
-    async ({ email, password, displayName }: SignUpInput) => {
+    async ({ email, password, displayName, next }: SignUpInput) => {
       setLoading(true);
       setError(null);
 
       try {
+        const emailRedirectTo = `${window.location.origin}/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`;
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -34,6 +36,7 @@ export function useAuthActions() {
             data: {
               display_name: displayName,
             },
+            emailRedirectTo,
           },
         });
 
@@ -83,17 +86,16 @@ export function useAuthActions() {
   );
 
   const signInWithOAuth = useCallback(
-    async (provider: "google" | "apple" | "github") => {
+    async (provider: "google" | "apple" | "github", next?: string) => {
       setLoading(true);
       setError(null);
 
       try {
+        const redirectTo = `${window.location.origin}/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`;
         const { data, error: oauthError } = await supabase.auth.signInWithOAuth(
           {
             provider,
-            options: {
-              redirectTo: `${window.location.origin}/callback`,
-            },
+            options: { redirectTo },
           }
         );
 
@@ -112,17 +114,15 @@ export function useAuthActions() {
   );
 
   const signInWithMagicLink = useCallback(
-    async (email: string) => {
+    async (email: string, next?: string) => {
       setLoading(true);
       setError(null);
 
       try {
+        const emailRedirectTo = `${window.location.origin}/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`;
         const { error: magicLinkError } = await supabase.auth.signInWithOtp({
           email,
-          options: {
-            // emailRedirectTo: `${window.location.origin}/callback`,
-            emailRedirectTo: `${window.location.origin}/callback`,
-          },
+          options: { emailRedirectTo },
         });
 
         if (magicLinkError) throw magicLinkError;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthActions } from "@/presentation/hooks/use-auth";
 
 export default function RegisterPage() {
@@ -12,13 +12,18 @@ export default function RegisterPage() {
   const [confirmSent, setConfirmSent] = useState(false);
   const { signUp, signInWithOAuth, loading, error, resetError } = useAuthActions();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawRedirect = searchParams.get("redirect");
+  // Only allow relative paths to prevent open redirects
+  const safeRedirect = rawRedirect?.startsWith("/") ? rawRedirect : null;
+  const destination = safeRedirect ?? "/groups";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const result = await signUp({ email, password, displayName });
+      const result = await signUp({ email, password, displayName, next: safeRedirect ?? undefined });
       if (result.user?.email_confirmed_at) {
-        router.push("/groups");
+        router.push(destination);
       } else {
         setConfirmSent(true);
       }
@@ -29,7 +34,7 @@ export default function RegisterPage() {
 
   const handleOAuth = async (provider: "google" | "apple" | "github") => {
     try {
-      await signInWithOAuth(provider);
+      await signInWithOAuth(provider, safeRedirect ?? undefined);
     } catch {
       // Error is handled by the hook
     }
@@ -155,7 +160,10 @@ export default function RegisterPage() {
 
         <p className="text-center text-sm text-gray-600 dark:text-gray-400">
           Already have an account?{" "}
-          <Link href="/signin" className="text-blue-600 hover:underline">
+          <Link
+            href={safeRedirect ? `/signin?redirect=${encodeURIComponent(safeRedirect)}` : "/signin"}
+            className="text-blue-600 hover:underline"
+          >
             Sign in
           </Link>
         </p>
