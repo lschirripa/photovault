@@ -16,6 +16,7 @@ interface UsePersonsOptions {
 
 export function usePersons({ groupId }: UsePersonsOptions) {
   const [persons, setPersons] = useState<PersonDTO[]>([]);
+  const [dismissedPersons, setDismissedPersons] = useState<PersonDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +37,21 @@ export function usePersons({ groupId }: UsePersonsOptions) {
       setError(err instanceof Error ? err.message : "Failed to fetch persons");
     } finally {
       setLoading(false);
+    }
+  }, [groupId]);
+
+  const fetchDismissedPersons = useCallback(async () => {
+    if (!groupId) return;
+    try {
+      const response = await fetch(`/api/persons?groupId=${groupId}&dismissed=true`);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to fetch dismissed persons");
+      }
+      const data = await response.json();
+      setDismissedPersons(data.persons);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch dismissed persons");
     }
   }, [groupId]);
 
@@ -95,20 +111,64 @@ export function usePersons({ groupId }: UsePersonsOptions) {
     []
   );
 
-  const dismissPerson = useCallback(
+  // Optimistic dismiss — removes from local state immediately and returns an undo fn.
+  // The caller is responsible for the actual API call (DELETE) after the undo window.
+  const dismissPerson = useCallback((personId: string): () => void => {
+    let removed: PersonDTO | undefined;
+    let removedIndex: number | undefined;
+
+    setPersons((prev) => {
+      removedIndex = prev.findIndex((p) => p.id === personId);
+      if (removedIndex === -1) return prev;
+      removed = prev[removedIndex];
+      return prev.filter((p) => p.id !== personId);
+    });
+
+    // Undo: re-insert the person sorted by faceCount desc
+    return () => {
+      if (!removed) return;
+      const person = removed;
+      setPersons((prev) => {
+        // Insert back in sorted position (by faceCount desc)
+        const insertAt = prev.findIndex((p) => p.faceCount < person.faceCount);
+        if (insertAt === -1) return [...prev, person];
+        const next = [...prev];
+        next.splice(insertAt, 0, person);
+        return next;
+      });
+    };
+  }, []);
+
+  const restorePerson = useCallback(
     async (personId: string): Promise<boolean> => {
       try {
         const response = await fetch(`/api/persons/${personId}`, {
-          method: "DELETE",
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dismissed: false }),
         });
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.error || "Failed to dismiss person");
+          throw new Error(data.error || "Failed to restore person");
         }
-        setPersons((prev) => prev.filter((p) => p.id !== personId));
+
+        // Move from dismissedPersons → persons (sorted by faceCount desc)
+        setDismissedPersons((prev) => {
+          const person = prev.find((p) => p.id === personId);
+          if (!person) return prev;
+          setPersons((active) => {
+            const insertAt = active.findIndex((p) => p.faceCount < person.faceCount);
+            if (insertAt === -1) return [...active, person];
+            const next = [...active];
+            next.splice(insertAt, 0, person);
+            return next;
+          });
+          return prev.filter((p) => p.id !== personId);
+        });
+
         return true;
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to dismiss");
+        setError(err instanceof Error ? err.message : "Failed to restore");
         return false;
       }
     },
@@ -117,12 +177,15 @@ export function usePersons({ groupId }: UsePersonsOptions) {
 
   return {
     persons,
+    dismissedPersons,
     loading,
     error,
     fetchPersons,
+    fetchDismissedPersons,
     renamePerson,
     mergePersons,
     dismissPerson,
+    restorePerson,
     clearError: () => setError(null),
   };
 }

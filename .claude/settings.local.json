@@ -17,7 +17,9 @@
       "Bash(git fetch:*)",
       "Bash(git stash:*)",
       "Bash(npm ls:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm run lint:*)"
     ]
   }
 }

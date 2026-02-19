@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/infrastructure/supabase/browser";
 import { useAuth } from "@/presentation/providers/auth-provider";
@@ -29,6 +30,7 @@ import { InviteModal } from "@/presentation/components/groups/invite-modal";
 import { useInvites } from "@/presentation/hooks/use-invites";
 import { usePersons } from "@/presentation/hooks/use-persons";
 import { PersonCard } from "@/presentation/components/persons/person-card";
+import { UndoToast, type ToastItem } from "@/presentation/components/ui/undo-toast";
 import { useGroupUpdate } from "@/presentation/hooks/use-group-update";
 import type { Group } from "@/domain/entities/group";
 import type { MediaAsset } from "@/domain/entities/media-asset";
@@ -113,10 +115,35 @@ export default function GroupDetailPage() {
 
   const {
     persons,
+    dismissedPersons,
     fetchPersons,
+    fetchDismissedPersons,
     renamePerson,
     dismissPerson,
+    restorePerson,
   } = usePersons({ groupId });
+
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [showDismissed, setShowDismissed] = useState(false);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const handleDismissPerson = useCallback((personId: string) => {
+    const undo = dismissPerson(personId);
+    const id = crypto.randomUUID();
+    setToasts((prev) => [
+      ...prev,
+      {
+        id,
+        message: "Person dismissed",
+        onUndo: undo,
+        onCommit: () => fetch(`/api/persons/${personId}`, { method: "DELETE" }),
+        duration: 5000,
+      },
+    ]);
+  }, [dismissPerson]);
 
   // Filter ready media for selection
   const readyMedia = useMemo(
@@ -246,6 +273,13 @@ export default function GroupDetailPage() {
       fetchInvites();
     }
   }, [showInviteModal, isAdmin, fetchInvites]);
+
+  // Fetch dismissed persons when panel opens (admin only)
+  useEffect(() => {
+    if (showDismissed && isAdmin) {
+      fetchDismissedPersons();
+    }
+  }, [showDismissed, isAdmin, fetchDismissedPersons]);
 
   // Wake lock: keep screen on during uploads
   useEffect(() => {
@@ -601,28 +635,96 @@ export default function GroupDetailPage() {
       </section>
 
       {/* People Section */}
-      {persons.length > 0 && (
+      {(persons.length > 0 || isAdmin) && (
         <section className="mb-8">
-          <h2 className="text-lg font-semibold tracking-tight mb-4">People</h2>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
-            {persons.map((person) => (
-              <PersonCard
-                key={person.id}
-                person={person}
-                groupId={groupId}
-                onRename={renamePerson}
-                onDismiss={dismissPerson}
-                selected={selectedPersonIds.includes(person.id)}
-                onToggleSelect={(personId) => {
-                  setSelectedPersonIds((prev) =>
-                    prev.includes(personId)
-                      ? prev.filter((id) => id !== personId)
-                      : [...prev, personId]
-                  );
-                }}
-              />
-            ))}
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold tracking-tight">People</h2>
+            {isAdmin && (
+              <button
+                onClick={() => setShowDismissed((v) => !v)}
+                className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1"
+              >
+                Manage dismissed
+                <svg
+                  className={`w-4 h-4 transition-transform ${showDismissed ? "rotate-180" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            )}
           </div>
+
+          {persons.length > 0 && (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+              {persons.map((person) => (
+                <PersonCard
+                  key={person.id}
+                  person={person}
+                  groupId={groupId}
+                  onRename={renamePerson}
+                  onDismiss={handleDismissPerson}
+                  selected={selectedPersonIds.includes(person.id)}
+                  onToggleSelect={(personId) => {
+                    setSelectedPersonIds((prev) =>
+                      prev.includes(personId)
+                        ? prev.filter((id) => id !== personId)
+                        : [...prev, personId]
+                    );
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Dismissed persons panel (admin only) */}
+          {isAdmin && showDismissed && (
+            <div className="mt-6 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Dismissed people</h3>
+              {dismissedPersons.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No dismissed people</p>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+                  {dismissedPersons.map((person) => (
+                    <div key={person.id} className="text-center">
+                      <div className="w-full aspect-square rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 mx-auto mb-1 relative opacity-60">
+                        {person.faceCropUrl ? (
+                          <Image
+                            src={person.faceCropUrl}
+                            alt={person.name || "Unknown person"}
+                            fill
+                            unoptimized
+                            className="object-cover"
+                            sizes="80px"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs truncate max-w-full text-gray-600 dark:text-gray-400">
+                        {person.name || "Unknown"}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        {person.faceCount} photo{person.faceCount !== 1 ? "s" : ""}
+                      </p>
+                      <button
+                        onClick={() => restorePerson(person.id)}
+                        className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -768,6 +870,13 @@ export default function GroupDetailPage() {
         </div>
       )}
 
+
+      {/* Undo Toast */}
+      <UndoToast
+        toasts={toasts}
+        onDismiss={removeToast}
+        className={selectionMode ? "bottom-24 left-6" : "bottom-6 left-6"}
+      />
 
       {/* Lightbox */}
       <Lightbox

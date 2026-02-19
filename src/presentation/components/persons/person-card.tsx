@@ -9,7 +9,7 @@ interface PersonCardProps {
   person: PersonDTO;
   groupId: string;
   onRename: (personId: string, name: string) => Promise<boolean>;
-  onDismiss: (personId: string) => Promise<boolean>;
+  onDismiss: (personId: string) => void;
   selected?: boolean;
   onToggleSelect?: (personId: string) => void;
 }

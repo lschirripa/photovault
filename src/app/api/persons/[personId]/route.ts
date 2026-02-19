@@ -20,20 +20,25 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { name } = body;
+    const { name, dismissed } = body;
 
-    if (typeof name !== "string") {
-      return NextResponse.json({ error: "Missing name" }, { status: 400 });
+    if (typeof name !== "string" && typeof dismissed !== "boolean") {
+      return NextResponse.json({ error: "Missing name or dismissed" }, { status: 400 });
     }
 
+    const updates: Record<string, unknown> = {};
+    if (typeof name === "string") updates.name = name.trim() || null;
+    if (typeof dismissed === "boolean") updates.dismissed = dismissed;
+
     // RLS ensures user can only update persons in their groups
-    const { data: updated, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await (supabase
       .from("persons")
-      .update({ name: name.trim() || null })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .update(updates as any)
       .eq("id", personId)
-      .select("id, name")
-      .single() as unknown as {
-      data: { id: string; name: string | null } | null;
+      .select("id, name, dismissed")
+      .single()) as unknown as {
+      data: { id: string; name: string | null; dismissed: boolean } | null;
       error: Error | null;
     };
 
@@ -73,10 +78,11 @@ export async function DELETE(
 
     // Soft dismiss: mark as dismissed rather than deleting.
     // RLS ensures the user can only update persons in their own groups.
-    const { error: updateError } = await supabase
+    const { error: updateError } = await (supabase
       .from("persons")
-      .update({ dismissed: true })
-      .eq("id", personId) as unknown as { error: Error | null };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .update({ dismissed: true } as any)
+      .eq("id", personId)) as unknown as { error: Error | null };
 
     if (updateError) {
       return NextResponse.json({ error: "Person not found" }, { status: 404 });
