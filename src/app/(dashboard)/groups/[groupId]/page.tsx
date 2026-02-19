@@ -393,6 +393,14 @@ export default function GroupDetailPage() {
     }
   }, [lightboxIndex, readyMedia, originalUrls, fetchMediaUrl]);
 
+  // Load more media when lightbox navigates near the end of loaded items
+  useEffect(() => {
+    if (lightboxIndex === null || !hasMore || loadingMore) return;
+    if (lightboxIndex >= readyMedia.length - 5) {
+      loadMore();
+    }
+  }, [lightboxIndex, readyMedia.length, hasMore, loadingMore, loadMore]);
+
   // Infinite scroll is handled inside MediaGrid (sentinel inside its scroll container)
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
