@@ -436,6 +436,45 @@ export function useMediaUpload(groupId: string) {
     [uploadFile]
   );
 
+  /**
+   * Pre-seed upload entries for a known batch of files before they are
+   * available as File objects (e.g. Google Drive imports). Returns the
+   * pre-assigned file IDs so callers can pass them to uploadFile() later.
+   */
+  const preSeedFiles = useCallback(
+    (fileInfos: Array<{ name: string; sizeBytes: number }>): string[] => {
+      const fileIds = fileInfos.map(() => generateUUID());
+      setUploads((prev) => {
+        const next = new Map(prev);
+        fileInfos.forEach((info, idx) => {
+          next.set(fileIds[idx], {
+            fileId: fileIds[idx],
+            filename: info.name,
+            progress: 0,
+            status: "queued",
+            retryCount: 0,
+            bytesLoaded: 0,
+            bytesTotal: info.sizeBytes,
+          });
+        });
+        return next;
+      });
+      return fileIds;
+    },
+    []
+  );
+
+  /**
+   * Mark a pre-seeded entry as errored (e.g. when a Drive download fails
+   * before uploadFile is ever called).
+   */
+  const markUploadError = useCallback(
+    (fileId: string, message: string) => {
+      updateUpload(fileId, { status: "error", error: message });
+    },
+    [updateUpload]
+  );
+
   const retryUpload = useCallback(
     async (fileId: string): Promise<void> => {
       const file = fileMapRef.current.get(fileId);
@@ -496,6 +535,8 @@ export function useMediaUpload(groupId: string) {
     isUploading,
     uploadFile,
     uploadFiles,
+    preSeedFiles,
+    markUploadError,
     retryUpload,
     retryAllFailed,
     clearUploads,

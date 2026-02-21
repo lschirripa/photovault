@@ -150,7 +150,10 @@ export async function POST(request: NextRequest) {
       const sharp = (await import("sharp")).default;
       const isHeic = asset.mime_type === "image/heic" || asset.mime_type === "image/heif";
 
-      const sharpInstance = sharp(imageBuffer);
+      // .rotate() with no args reads the EXIF Orientation tag and physically
+      // rotates the pixels, then strips the tag so all derived buffers
+      // (thumbnail, HEIC web version) are upright without viewer-side correction.
+      const sharpInstance = sharp(imageBuffer).rotate();
 
       // Generate thumbnail from clone
       const thumbnailBuffer = await sharpInstance
@@ -162,11 +165,10 @@ export async function POST(request: NextRequest) {
         .jpeg({ quality: 80 })
         .toBuffer();
 
-      // Upload thumbnail - replace extension with .jpg
-      const thumbnailKey = asset.original_key.replace(
-        /\/([^/]+)\.[^.]+$/,
-        "/thumb_$1.jpg"
-      );
+      // Derive thumbnail and web keys from the date prefix in original_key.
+      // New key scheme: media/{groupId}/{YYYY}/{MM}/{assetId}-{filename}
+      const [, , thumbYear, thumbMonth] = asset.original_key.split("/");
+      const thumbnailKey = `thumbs/${asset.group_id}/${thumbYear}/${thumbMonth}/${assetId}.jpg`;
 
       const { url: uploadUrl } = await storageService.generateUploadUrl(
         thumbnailKey,
@@ -193,10 +195,7 @@ export async function POST(request: NextRequest) {
           .jpeg({ quality: 90 })
           .toBuffer();
 
-        const webKey = asset.original_key.replace(
-          /\/([^/]+)\.[^.]+$/,
-          "/web_$1.jpg"
-        );
+        const webKey = `web/${asset.group_id}/${thumbYear}/${thumbMonth}/${assetId}.jpg`;
 
         const { url: webUploadUrl } = await storageService.generateUploadUrl(
           webKey,

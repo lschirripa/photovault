@@ -74,10 +74,15 @@ export async function POST(request: NextRequest) {
             asset.mime_type === "image/heic" ||
             asset.mime_type === "image/heif";
           if (isHeic) {
-            key = asset.original_key.replace(
-              /\/([^/]+)\.[^.]+$/,
-              "/web_$1.jpg"
-            );
+            // New key scheme: media/{groupId}/{YYYY}/{MM}/{assetId}-{filename}
+            // Old key scheme: media/{groupId}/{userId}/{timestamp}-{filename}
+            // Distinguish by checking whether parts[2] is a 4-digit year.
+            const parts = asset.original_key.split("/");
+            if (/^\d{4}$/.test(parts[2])) {
+              key = `web/${parts[1]}/${parts[2]}/${parts[3]}/${asset.id}.jpg`;
+            } else {
+              key = asset.original_key.replace(/\/([^/]+)\.[^.]+$/, "/web_$1.jpg");
+            }
           } else {
             key = asset.original_key;
           }

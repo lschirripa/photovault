@@ -45,7 +45,7 @@ export default function UploadPage() {
   const { user, loading: authLoading } = useAuth();
   const { groups, fetchGroups, loading: groupsLoading } = useGroups();
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
-  const { uploads, uploadFiles, clearUploads, retryUpload, retryAllFailed, removeUpload, isUploading } = useMediaUpload(selectedGroupId);
+  const { uploads, uploadFile, uploadFiles, preSeedFiles, markUploadError, clearUploads, retryUpload, retryAllFailed, removeUpload, isUploading } = useMediaUpload(selectedGroupId);
   const wakeLock = useWakeLock();
   const [dragOver, setDragOver] = useState(false);
   const router = useRouter();
@@ -179,37 +179,59 @@ export default function UploadPage() {
     const collectedAssetIds: string[] = [];
     let currentToken = accessToken;
 
+    // Pre-seed ALL files into the upload map immediately so the progress panel
+    // shows the correct total ("1 of 100") from the very first upload.
+    const allFileIds = preSeedFiles(
+      visibleDriveFiles.map((f) => ({ name: f.name, sizeBytes: f.sizeBytes }))
+    );
+
     try {
-      // Process in batches matching upload concurrency
+      // Process in batches: download then upload, keeping concurrency bounded
       for (let i = 0; i < visibleDriveFiles.length; i += DRIVE_CONCURRENCY) {
         const batch = visibleDriveFiles.slice(i, i + DRIVE_CONCURRENCY);
+        const batchFileIds = allFileIds.slice(i, i + DRIVE_CONCURRENCY);
 
         const downloadResults = await Promise.allSettled(
-          batch.map(async (df) => {
+          batch.map(async (df, batchIdx) => {
             try {
-              return await downloadDriveFile(df.id, df.name, df.mimeType, currentToken);
+              const file = await downloadDriveFile(df.id, df.name, df.mimeType, currentToken);
+              return { file, fileId: batchFileIds[batchIdx] };
             } catch (err) {
               if (err instanceof TokenExpiredError) {
                 // Re-request token and retry
                 currentToken = await requestNewToken();
-                return await downloadDriveFile(df.id, df.name, df.mimeType, currentToken);
+                const file = await downloadDriveFile(df.id, df.name, df.mimeType, currentToken);
+                return { file, fileId: batchFileIds[batchIdx] };
               }
               throw err;
             }
           })
         );
 
-        const filesToUpload: File[] = [];
-        for (const result of downloadResults) {
+        const uploadTasks: Array<{ file: File; fileId: string }> = [];
+        downloadResults.forEach((result, idx) => {
           if (result.status === "fulfilled") {
-            filesToUpload.push(result.value);
+            uploadTasks.push(result.value);
+          } else {
+            // Mark the pre-seeded entry as failed so it shows in the progress panel
+            const msg = result.reason instanceof Error ? result.reason.message : "Download failed";
+            markUploadError(batchFileIds[idx], msg);
           }
-          // Failed downloads are skipped; upload progress will show errors
-        }
+        });
 
-        if (filesToUpload.length > 0) {
-          const assetIds = await uploadFiles(filesToUpload);
-          collectedAssetIds.push(...assetIds);
+        // Upload each downloaded file using its pre-assigned ID
+        const uploadResults = await Promise.allSettled(
+          uploadTasks.map(({ file, fileId }) => uploadFile(file, fileId))
+        );
+
+        for (const result of uploadResults) {
+          if (result.status === "fulfilled") {
+            collectedAssetIds.push(result.value);
+          } else {
+            setDriveImportError(
+              result.reason instanceof Error ? result.reason.message : "Upload failed"
+            );
+          }
         }
       }
 

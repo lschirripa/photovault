@@ -90,15 +90,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique key for the file
-    const timestamp = Date.now();
+    // Pre-generate assetId so it can be embedded directly in the R2 key.
+    // New scheme: media/{groupId}/{YYYY}/{MM}/{assetId}-{filename}
+    const assetId = crypto.randomUUID();
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, "0");
     const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
-    const key = `media/${groupId}/${user.id}/${timestamp}-${sanitizedFilename}`;
+    const key = `media/${groupId}/${year}/${month}/${assetId}-${sanitizedFilename}`;
 
     // Create media asset record
     const { data: asset, error: assetError } = (await supabase
       .from("media_assets")
       .insert({
+        id: assetId,
         group_id: groupId,
         uploaded_by: user.id,
         filename,
@@ -134,7 +139,7 @@ export async function POST(request: NextRequest) {
 
     // For videos, generate a second presigned URL for the client-side thumbnail
     if (mediaType === "video") {
-      const thumbKey = `media/${groupId}/${user.id}/${timestamp}-thumb_${sanitizedFilename.replace(/\.[^.]+$/, "")}.jpg`;
+      const thumbKey = `thumbs/${groupId}/${year}/${month}/${assetId}.jpg`;
       const thumbPresigned = await storageService.generateUploadUrl(thumbKey, {
         contentType: "image/jpeg",
       });
