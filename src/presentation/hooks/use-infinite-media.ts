@@ -119,8 +119,59 @@ export function useInfiniteMedia({
         let rows: Tables<"media_assets">[];
 
         const personIds = filters.personIds;
-        if (personIds && personIds.length > 0) {
-          // Person-filter mode: use RPC to find media containing all selected persons
+        if (albumId && personIds && personIds.length > 0) {
+          // Album + Person filter mode: use RPC to find media in this album containing all selected persons
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: rpcData, error: rpcError } = (await (supabase.rpc as any)(
+            "find_album_media_by_persons",
+            {
+              p_album_id: albumId,
+              p_person_ids: personIds,
+              p_limit: PAGE_SIZE,
+              p_cursor: cursor || undefined,
+            }
+          )) as unknown as {
+            data: { media_asset_id: string; added_at: string }[] | null;
+            error: Error | null;
+          };
+
+          if (rpcError) throw rpcError;
+
+          if (!rpcData || rpcData.length === 0) {
+            setHasMore(false);
+            if (!append) setMedia([]);
+            return;
+          }
+
+          const mediaIds = rpcData.map((r) => r.media_asset_id);
+
+          let mediaQuery = supabase
+            .from("media_assets")
+            .select("*")
+            .in("id", mediaIds);
+
+          // Apply remaining filters (date, type, etc.) but not personIds
+          mediaQuery = applyFilters(mediaQuery, { ...filters, personIds: undefined });
+
+          const { data: mediaData, error: mediaError } = (await mediaQuery) as unknown as {
+            data: Tables<"media_assets">[] | null;
+            error: Error | null;
+          };
+
+          if (mediaError) throw mediaError;
+
+          // Maintain added_at DESC order from RPC
+          const mediaMap = new Map((mediaData ?? []).map((m) => [m.id, m]));
+          rows = mediaIds
+            .map((id) => mediaMap.get(id))
+            .filter((m): m is Tables<"media_assets"> => m != null);
+
+          // Use added_at from last RPC result as cursor
+          const lastItem = rpcData[rpcData.length - 1];
+          cursorRef.current = lastItem?.added_at ?? null;
+          setHasMore(rpcData.length === PAGE_SIZE);
+        } else if (personIds && personIds.length > 0) {
+          // Person-filter mode (group-wide): use RPC to find media containing all selected persons
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: rpcData, error: rpcError } = (await (supabase.rpc as any)(
             "find_media_by_persons",

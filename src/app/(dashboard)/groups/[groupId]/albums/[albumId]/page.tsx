@@ -11,7 +11,9 @@ import { useMediaDownload } from "@/presentation/hooks/use-media-download";
 import { useInfiniteMedia } from "@/presentation/hooks/use-infinite-media";
 import { useUrlCache } from "@/presentation/hooks/use-url-cache";
 import { useMediaFilterOptions } from "@/presentation/hooks/use-media-filter-options";
+import { useAlbumPersons } from "@/presentation/hooks/use-album-persons";
 import { MediaFilterBar } from "@/presentation/components/gallery/media-filter-bar";
+import { PersonCard } from "@/presentation/components/persons/person-card";
 import type { MediaFilters, MediaSort } from "@/domain/types/media-filters";
 import { DEFAULT_SORT, isFiltersActive } from "@/domain/types/media-filters";
 import { ConfirmDialog } from "@/presentation/components/ui/confirm-dialog";
@@ -38,7 +40,16 @@ export default function AlbumDetailPage() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [filters, setFilters] = useState<MediaFilters>({});
   const [sort, setSort] = useState<MediaSort>(DEFAULT_SORT);
+  const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
   const supabase = createClient();
+
+  const { persons: albumPersons, fetchPersons: fetchAlbumPersons, renamePerson } = useAlbumPersons({ albumId });
+
+  // Combine explicit filters with person selection
+  const combinedFilters = useMemo<MediaFilters>(() => {
+    if (selectedPersonIds.length === 0) return filters;
+    return { ...filters, personIds: selectedPersonIds };
+  }, [filters, selectedPersonIds]);
 
   // Infinite media pagination for album
   const {
@@ -49,7 +60,7 @@ export default function AlbumDetailPage() {
     error: mediaError,
     loadMore,
     removeItems,
-  } = useInfiniteMedia({ groupId, albumId, filters, sort });
+  } = useInfiniteMedia({ groupId, albumId, filters: combinedFilters, sort });
 
   const { locationData, hasAnyLocation, dateRange, fetchLocationChildren } = useMediaFilterOptions(groupId, albumId);
 
@@ -141,8 +152,9 @@ export default function AlbumDetailPage() {
   useEffect(() => {
     if (user && albumId) {
       fetchAlbumInfo();
+      fetchAlbumPersons();
     }
-  }, [user, albumId, fetchAlbumInfo]);
+  }, [user, albumId, fetchAlbumInfo, fetchAlbumPersons]);
 
   // Fetch thumbnail URLs in batch (cache handles dedup/TTL)
   useEffect(() => {
@@ -298,6 +310,32 @@ export default function AlbumDetailPage() {
         </div>
       </header>
 
+      {/* People in this Album */}
+      {albumPersons.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-lg font-semibold tracking-tight mb-3">People in this Album</h2>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+            {albumPersons.map((person) => (
+              <PersonCard
+                key={person.id}
+                person={person}
+                groupId={groupId}
+                onRename={renamePerson}
+                onDismiss={() => {}}
+                selected={selectedPersonIds.includes(person.id)}
+                onToggleSelect={(personId) => {
+                  setSelectedPersonIds((prev) =>
+                    prev.includes(personId)
+                      ? prev.filter((id) => id !== personId)
+                      : [...prev, personId]
+                  );
+                }}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       <MediaFilterBar
         filters={filters}
         sort={sort}
@@ -309,14 +347,31 @@ export default function AlbumDetailPage() {
         fetchLocationChildren={fetchLocationChildren}
       />
 
+      {selectedPersonIds.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-sm">
+            Filtering by {selectedPersonIds.length} {selectedPersonIds.length === 1 ? "person" : "people"}
+            <button
+              onClick={() => setSelectedPersonIds([])}
+              className="ml-1 hover:text-blue-600 dark:hover:text-blue-100"
+              title="Clear person filter"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </span>
+        </div>
+      )}
+
       {media.length === 0 ? (
-        isFiltersActive(filters) ? (
+        isFiltersActive(combinedFilters) ? (
           <div className="text-center py-12">
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               No media matches your filters
             </p>
             <button
-              onClick={() => setFilters({})}
+              onClick={() => { setFilters({}); setSelectedPersonIds([]); }}
               className="text-blue-600 hover:underline"
             >
               Clear filters
