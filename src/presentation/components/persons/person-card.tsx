@@ -25,42 +25,57 @@ export function PersonCard({ person, groupId, onRename, onDismiss, selected, onT
   };
 
   const avatarContent = (
-    <div
-      className={`w-full aspect-square rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800 mx-auto mb-2 relative transition-all ${
-        selected ? "ring-3 ring-blue-500 ring-offset-2 dark:ring-offset-gray-900" : ""
-      }`}
-    >
-      {person.faceCropUrl ? (
-        <Image
-          src={person.faceCropUrl}
-          alt={person.name || "Unknown person"}
-          fill
-          unoptimized
-          className="object-cover"
-          sizes="120px"
-        />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <svg
-            className="w-10 h-10 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            />
-          </svg>
-        </div>
-      )}
+    <div className="relative mx-auto mb-2 w-full">
+      <div
+        className={`w-full aspect-square rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800 relative transition-all duration-200 ease-out ${
+          selected
+            ? "ring-4 ring-blue-500 ring-offset-3 dark:ring-offset-gray-900 shadow-[0_0_14px_rgba(59,130,246,0.45)] scale-105"
+            : ""
+        }`}
+      >
+        {person.faceCropUrl ? (
+          <Image
+            src={person.faceCropUrl}
+            alt={person.name || "Unknown person"}
+            fill
+            unoptimized
+            className="object-cover"
+            sizes="120px"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <svg
+              className="w-10 h-10 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              />
+            </svg>
+          </div>
+        )}
+      </div>
+
+      {/* Checkmark badge — outside overflow-hidden so it isn't clipped */}
+      <div
+        className={`absolute bottom-0 right-0 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center shadow-sm transition-all duration-200 ${
+          selected ? "scale-100 opacity-100" : "scale-0 opacity-0"
+        }`}
+      >
+        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
     </div>
   );
 
   return (
-    <div className="group relative text-center transition-transform duration-200 hover:-translate-y-1">
+    <div className={`group relative text-center transition-transform duration-200 hover:-translate-y-1 ${selected ? "-translate-y-0.5" : ""}`}>
       {onToggleSelect ? (
         <button
           onClick={() => onToggleSelect(person.id)}
@@ -97,7 +112,7 @@ export function PersonCard({ person, groupId, onRename, onDismiss, selected, onT
       ) : (
         <button
           onClick={() => setEditing(true)}
-          className="text-sm truncate max-w-full hover:underline"
+          className={`text-sm truncate max-w-full hover:underline transition-colors duration-200 ${selected ? "text-blue-600 dark:text-blue-400" : ""}`}
           title="Click to rename"
         >
           {person.name || "Add name"}

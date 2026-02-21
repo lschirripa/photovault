@@ -21,5 +21,6 @@
       "Bash(npm run type-check:*)",
       "Bash(npm run lint:*)"
     ]
-  }
+  },
+  "outputStyle": "default"
 }
