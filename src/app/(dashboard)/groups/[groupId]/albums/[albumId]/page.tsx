@@ -7,7 +7,7 @@ import { createClient } from "@/infrastructure/supabase/browser";
 import { useAuth } from "@/presentation/providers/auth-provider";
 import { useMediaActions } from "@/presentation/hooks/use-media-actions";
 import { useMediaSelection } from "@/presentation/hooks/use-media-selection";
-import { useMediaDownload } from "@/presentation/hooks/use-media-download";
+import { useMediaDownload, useSupportsNativeShare } from "@/presentation/hooks/use-media-download";
 import { useInfiniteMedia } from "@/presentation/hooks/use-infinite-media";
 import { useUrlCache } from "@/presentation/hooks/use-url-cache";
 import { useMediaFilterOptions } from "@/presentation/hooks/use-media-filter-options";
@@ -20,6 +20,8 @@ import { ConfirmDialog } from "@/presentation/components/ui/confirm-dialog";
 import { MediaGrid } from "@/presentation/components/gallery/media-grid";
 import { Lightbox } from "@/presentation/components/gallery/lightbox";
 import { Button } from "@/presentation/components/ui/button";
+import { CoverToast } from "@/presentation/components/ui/cover-toast";
+import { useGroupUpdate } from "@/presentation/hooks/use-group-update";
 import type { MediaAsset } from "@/domain/entities/media-asset";
 import type { AlbumResponseDTO } from "@/application/dto/album-dto";
 import { MemberRole, hasPermission } from "@/domain/enums/member-role";
@@ -41,7 +43,11 @@ export default function AlbumDetailPage() {
   const [filters, setFilters] = useState<MediaFilters>({});
   const [sort, setSort] = useState<MediaSort>(DEFAULT_SORT);
   const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
+  const [coverToastVisible, setCoverToastVisible] = useState(false);
+  const [coverToastMessage, setCoverToastMessage] = useState("");
   const supabase = createClient();
+
+  const { setCover: setGroupCover } = useGroupUpdate(groupId);
 
   const { persons: albumPersons, fetchPersons: fetchAlbumPersons, renamePerson } = useAlbumPersons({ albumId });
 
@@ -62,7 +68,7 @@ export default function AlbumDetailPage() {
     removeItems,
   } = useInfiniteMedia({ groupId, albumId, filters: combinedFilters, sort });
 
-  const { locationData, hasAnyLocation, dateRange, fetchLocationChildren } = useMediaFilterOptions(groupId, albumId);
+  const { locationData, hasAnyLocation, dateRange, cameraOptions, fetchLocationChildren } = useMediaFilterOptions(groupId, albumId);
 
   const readyMedia = useMemo(
     () => media.filter((m) => m.status === "ready"),
@@ -84,7 +90,8 @@ export default function AlbumDetailPage() {
     exitSelectionMode,
   } = useMediaSelection(readyMediaIds);
 
-  const { downloadSingle, downloadZip, isDownloading } = useMediaDownload();
+  const { downloadSingle, downloadSelected, isDownloading } = useMediaDownload();
+  const supportsNativeShare = useSupportsNativeShare();
 
   const { deleteMedia, deletingId } = useMediaActions({
     onDeleteSuccess: (assetId) => {
@@ -225,8 +232,8 @@ export default function AlbumDetailPage() {
     setLightboxIndex(index);
   }, []);
 
-  const handleDownloadZip = () => {
-    downloadZip(Array.from(selectedIds));
+  const handleDownloadSelected = () => {
+    downloadSelected(Array.from(selectedIds));
   };
 
   const lightboxUrls = useMemo(() => {
@@ -296,9 +303,6 @@ export default function AlbumDetailPage() {
                 {album.description}
               </p>
             )}
-            <p className="text-sm text-gray-500 mt-2">
-              {media.length} {media.length === 1 ? "item" : "items"}
-            </p>
           </div>
           <div className="flex items-center gap-2">
             {readyMedia.length > 0 && !selectionMode && (
@@ -345,6 +349,7 @@ export default function AlbumDetailPage() {
         hasAnyLocation={hasAnyLocation}
         dateRange={dateRange}
         fetchLocationChildren={fetchLocationChildren}
+        cameraOptions={cameraOptions}
       />
 
       {selectedPersonIds.length > 0 && (
@@ -439,11 +444,11 @@ export default function AlbumDetailPage() {
               <Button
                 variant="primary"
                 size="sm"
-                onClick={handleDownloadZip}
+                onClick={handleDownloadSelected}
                 loading={isDownloading}
                 disabled={selectedCount === 0 || removing}
               >
-                Download Zip
+                {supportsNativeShare ? "Save" : "Download Zip"}
               </Button>
             </div>
           </div>
@@ -462,6 +467,29 @@ export default function AlbumDetailPage() {
         onDelete={setDeleteTarget}
         canDelete={canDeleteMedia}
         groupId={groupId}
+        onSetAsCover={async (assetId) => {
+          const result = await setGroupCover(assetId);
+          if (result) {
+            setCoverToastMessage("Group cover updated");
+            setCoverToastVisible(true);
+          }
+        }}
+        onSetAsAlbumCover={async (assetId) => {
+          try {
+            const response = await fetch(`/api/albums/${albumId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ coverAssetId: assetId }),
+            });
+            if (response.ok) {
+              setAlbum((prev) => prev ? { ...prev, coverAssetId: assetId, coverIsDefault: false } : prev);
+              setCoverToastMessage("Album cover updated");
+              setCoverToastVisible(true);
+            }
+          } catch (err) {
+            console.error("Set album cover error:", err);
+          }
+        }}
       />
 
       {/* Delete Confirmation */}
@@ -488,6 +516,13 @@ export default function AlbumDetailPage() {
         cancelLabel="Cancel"
         variant="primary"
         loading={removing}
+      />
+
+      {/* Cover Toast */}
+      <CoverToast
+        message={coverToastMessage}
+        visible={coverToastVisible}
+        onHidden={() => setCoverToastVisible(false)}
       />
     </div>
   );

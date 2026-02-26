@@ -62,18 +62,48 @@ export async function GET(request: NextRequest) {
       countMap.set(item.album_id, count + 1);
     }
 
-    const response: AlbumResponseDTO[] = (albums ?? []).map((album) => ({
-      id: album.id,
-      groupId: album.group_id,
-      name: album.name,
-      description: album.description,
-      coverAssetId: album.cover_asset_id,
-      coverUrl: null, // Will be fetched by client if needed
-      createdBy: album.created_by,
-      createdAt: album.created_at,
-      updatedAt: album.updated_at,
-      mediaCount: countMap.get(album.id) || 0,
-    }));
+    // Find fallback covers for albums without explicit covers
+    const albumsWithoutCover = (albums ?? []).filter((a) => !a.cover_asset_id);
+    const fallbackCoverMap = new Map<string, string>();
+
+    if (albumsWithoutCover.length > 0) {
+      const noCoverIds = albumsWithoutCover.map((a) => a.id);
+      const { data: recentMedia } = (await supabase
+        .from("album_media")
+        .select("album_id, media_id, added_at")
+        .in("album_id", noCoverIds)
+        .order("added_at", { ascending: false })) as unknown as {
+        data: { album_id: string; media_id: string; added_at: string }[] | null;
+        error: Error | null;
+      };
+
+      if (recentMedia) {
+        for (const row of recentMedia) {
+          if (!fallbackCoverMap.has(row.album_id)) {
+            fallbackCoverMap.set(row.album_id, row.media_id);
+          }
+        }
+      }
+    }
+
+    const response: AlbumResponseDTO[] = (albums ?? []).map((album) => {
+      const explicitCover = album.cover_asset_id;
+      const fallbackCover = fallbackCoverMap.get(album.id) ?? null;
+
+      return {
+        id: album.id,
+        groupId: album.group_id,
+        name: album.name,
+        description: album.description,
+        coverAssetId: explicitCover ?? fallbackCover,
+        coverIsDefault: !explicitCover && !!fallbackCover,
+        coverUrl: null, // Will be fetched by client if needed
+        createdBy: album.created_by,
+        createdAt: album.created_at,
+        updatedAt: album.updated_at,
+        mediaCount: countMap.get(album.id) || 0,
+      };
+    });
 
     return NextResponse.json({ albums: response, total: response.length });
   } catch (error) {

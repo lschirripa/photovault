@@ -77,6 +77,9 @@ function applyFilters(query: any, filters: MediaFilters) {
   if (filters.maxSizeBytes !== undefined) {
     query = query.lte("size_bytes", filters.maxSizeBytes);
   }
+  if (filters.cameraModel) {
+    query = query.eq("camera_model", filters.cameraModel);
+  }
   return query;
 }
 

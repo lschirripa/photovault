@@ -11,7 +11,7 @@ import { useWakeLock } from "@/presentation/hooks/use-wake-lock";
 import { UploadProgressPanel } from "@/presentation/components/upload/upload-progress-panel";
 import { useMediaActions } from "@/presentation/hooks/use-media-actions";
 import { useMediaSelection } from "@/presentation/hooks/use-media-selection";
-import { useMediaDownload } from "@/presentation/hooks/use-media-download";
+import { useMediaDownload, useSupportsNativeShare } from "@/presentation/hooks/use-media-download";
 import { useInfiniteMedia } from "@/presentation/hooks/use-infinite-media";
 import { useUrlCache } from "@/presentation/hooks/use-url-cache";
 import { useMediaFilterOptions } from "@/presentation/hooks/use-media-filter-options";
@@ -31,6 +31,7 @@ import { useInvites } from "@/presentation/hooks/use-invites";
 import { usePersons } from "@/presentation/hooks/use-persons";
 import { PersonCard } from "@/presentation/components/persons/person-card";
 import { UndoToast, type ToastItem } from "@/presentation/components/ui/undo-toast";
+import { CoverToast } from "@/presentation/components/ui/cover-toast";
 import { useGroupUpdate } from "@/presentation/hooks/use-group-update";
 import type { Group } from "@/domain/entities/group";
 import type { MediaAsset } from "@/domain/entities/media-asset";
@@ -88,7 +89,7 @@ export default function GroupDetailPage() {
     updateItems,
   } = useInfiniteMedia({ groupId, filters: combinedFilters, sort });
 
-  const { locationData, hasAnyLocation, dateRange, fetchLocationChildren } = useMediaFilterOptions(groupId);
+  const { locationData, hasAnyLocation, dateRange, cameraOptions, fetchLocationChildren } = useMediaFilterOptions(groupId);
 
   const {
     invites,
@@ -125,6 +126,8 @@ export default function GroupDetailPage() {
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [showDismissed, setShowDismissed] = useState(false);
+  const [coverToastVisible, setCoverToastVisible] = useState(false);
+  const [coverToastMessage, setCoverToastMessage] = useState("");
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -166,7 +169,8 @@ export default function GroupDetailPage() {
     exitSelectionMode,
   } = useMediaSelection(readyMediaIds);
 
-  const { downloadSingle, downloadZip, isDownloading } = useMediaDownload();
+  const { downloadSingle, downloadSelected, isDownloading } = useMediaDownload();
+  const supportsNativeShare = useSupportsNativeShare();
 
   const { deleteMedia, deletingId } = useMediaActions({
     onDeleteSuccess: (assetId) => {
@@ -434,8 +438,8 @@ export default function GroupDetailPage() {
     exitSelectionMode();
   };
 
-  const handleDownloadZip = () => {
-    downloadZip(Array.from(selectedIds));
+  const handleDownloadSelected = () => {
+    downloadSelected(Array.from(selectedIds));
   };
 
   const [albumFormLoading, setAlbumFormLoading] = useState(false);
@@ -749,6 +753,7 @@ export default function GroupDetailPage() {
           hasAnyLocation={hasAnyLocation}
           dateRange={dateRange}
           fetchLocationChildren={fetchLocationChildren}
+          cameraOptions={cameraOptions}
         />
 
       {selectedPersonIds.length > 0 && (
@@ -867,11 +872,11 @@ export default function GroupDetailPage() {
               <Button
                 variant="primary"
                 size="sm"
-                onClick={handleDownloadZip}
+                onClick={handleDownloadSelected}
                 loading={isDownloading}
                 disabled={selectedCount === 0 || bulkDeleting}
               >
-                Download Zip
+                {supportsNativeShare ? "Save" : "Download Zip"}
               </Button>
             </div>
           </div>
@@ -902,6 +907,8 @@ export default function GroupDetailPage() {
           const result = await setCover(assetId);
           if (result && group) {
             setGroup({ ...group, coverMediaId: assetId });
+            setCoverToastMessage("Group cover updated");
+            setCoverToastVisible(true);
           }
         }}
       />
@@ -983,6 +990,13 @@ export default function GroupDetailPage() {
           await revokeInvite(inviteId);
         }}
         loading={invitesLoading}
+      />
+
+      {/* Cover Toast */}
+      <CoverToast
+        message={coverToastMessage}
+        visible={coverToastVisible}
+        onHidden={() => setCoverToastVisible(false)}
       />
     </div>
   );

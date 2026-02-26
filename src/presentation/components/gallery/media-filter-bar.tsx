@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/presentation/components/ui/button";
-import type { LocationData } from "@/presentation/hooks/use-media-filter-options";
+import type { LocationData, CameraOption } from "@/presentation/hooks/use-media-filter-options";
 import type { MediaFilters, MediaSort } from "@/domain/types/media-filters";
 import {
   SORT_OPTIONS,
@@ -21,6 +21,7 @@ interface MediaFilterBarProps {
   hasAnyLocation: boolean;
   dateRange: { earliest: string | null; latest: string | null };
   fetchLocationChildren: (country?: string, state?: string) => void;
+  cameraOptions?: CameraOption[];
   resultCount?: number;
 }
 
@@ -33,6 +34,7 @@ export function MediaFilterBar({
   hasAnyLocation,
   dateRange,
   fetchLocationChildren,
+  cameraOptions,
 }: MediaFilterBarProps) {
   const [expanded, setExpanded] = useState(false);
   const activeCount = countActiveFilters(filters);
@@ -83,6 +85,10 @@ export function MediaFilterBar({
   if (filters.locationCity) {
     activeChips.push({ label: filters.locationCity, key: "locationCity" });
   }
+  if (filters.cameraModel) {
+    const cam = cameraOptions?.find((c) => c.value === filters.cameraModel);
+    activeChips.push({ label: `Camera: ${cam?.label ?? filters.cameraModel}`, key: "cameraModel" });
+  }
   if (filters.minSizeBytes !== undefined || filters.maxSizeBytes !== undefined) {
     const preset = SIZE_PRESETS.find(
       (p) => p.minSizeBytes === filters.minSizeBytes && p.maxSizeBytes === filters.maxSizeBytes
@@ -114,6 +120,9 @@ export function MediaFilterBar({
         break;
       case "locationCity":
         delete updated.locationCity;
+        break;
+      case "cameraModel":
+        delete updated.cameraModel;
         break;
       case "size":
         delete updated.minSizeBytes;
@@ -299,6 +308,30 @@ export function MediaFilterBar({
                   ))}
                 </select>
               )}
+            </div>
+          )}
+
+          {/* Camera */}
+          {cameraOptions && cameraOptions.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400 w-16 shrink-0">Camera:</span>
+              <select
+                value={filters.cameraModel ?? ""}
+                onChange={(e) =>
+                  onFiltersChange({
+                    ...filters,
+                    cameraModel: e.target.value || undefined,
+                  })
+                }
+                className={selectClass}
+              >
+                <option value="">All cameras</option>
+                {cameraOptions.map((cam) => (
+                  <option key={cam.value} value={cam.value}>
+                    {cam.label} ({cam.count})
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 

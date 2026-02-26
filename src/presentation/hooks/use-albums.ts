@@ -60,7 +60,7 @@ export function useAlbums({ groupId }: UseAlbumsOptions) {
   const updateAlbum = useCallback(
     async (
       albumId: string,
-      updates: { name?: string; description?: string | null }
+      updates: { name?: string; description?: string | null; coverAssetId?: string | null }
     ): Promise<boolean> => {
       try {
         const response = await fetch(`/api/albums/${albumId}`, {

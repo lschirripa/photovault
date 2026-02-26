@@ -9,6 +9,12 @@ export interface LocationOption {
   count: number;
 }
 
+export interface CameraOption {
+  value: string;
+  label: string;
+  count: number;
+}
+
 export interface LocationData {
   countries: LocationOption[];
   states: LocationOption[];  // populated when a country is selected
@@ -19,6 +25,7 @@ export interface FilterOptions {
   locationData: LocationData;
   hasAnyLocation: boolean;
   dateRange: { earliest: string | null; latest: string | null };
+  cameraOptions: CameraOption[];
   loading: boolean;
   /** Call when country/state selection changes to refresh sub-levels */
   fetchLocationChildren: (country?: string, state?: string) => void;
@@ -45,6 +52,7 @@ export function useMediaFilterOptions(
     earliest: null,
     latest: null,
   });
+  const [cameraOptions, setCameraOptions] = useState<CameraOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [allLocationRows, setAllLocationRows] = useState<LocationRow[]>([]);
   const supabase = createClient();
@@ -81,13 +89,15 @@ export function useMediaFilterOptions(
 
       // Fetch all relevant assets with the columns we need
       const { data: assets } = (await baseQuery()
-        .select("location_country, location_state, location_city, latitude, date_taken")) as unknown as {
+        .select("location_country, location_state, location_city, latitude, date_taken, camera_make, camera_model")) as unknown as {
         data: {
           location_country: string | null;
           location_state: string | null;
           location_city: string | null;
           latitude: number | null;
           date_taken: string | null;
+          camera_make: string | null;
+          camera_model: string | null;
         }[] | null;
         error: Error | null;
       };
@@ -129,8 +139,29 @@ export function useMediaFilterOptions(
         }
       }
 
+      // Compute camera options
+      const cameraMap = new Map<string, { make: string | null; count: number }>();
+      for (const a of assets) {
+        if (a.camera_model) {
+          const existing = cameraMap.get(a.camera_model);
+          if (existing) {
+            existing.count++;
+          } else {
+            cameraMap.set(a.camera_model, { make: a.camera_make, count: 1 });
+          }
+        }
+      }
+      const cameras: CameraOption[] = Array.from(cameraMap.entries())
+        .map(([model, { make, count }]) => ({
+          value: model,
+          label: make ? `${make} ${model}` : model,
+          count,
+        }))
+        .sort((a, b) => b.count - a.count);
+
       setLocationData({ countries, states: [], cities: [] });
       setHasAnyLocation(locationCount > 0);
+      setCameraOptions(cameras);
       setDateRange({ earliest, latest });
     } catch (err) {
       console.error("Failed to fetch filter options:", err);
@@ -182,5 +213,5 @@ export function useMediaFilterOptions(
     [allLocationRows]
   );
 
-  return { locationData, hasAnyLocation, dateRange, loading, fetchLocationChildren };
+  return { locationData, hasAnyLocation, dateRange, cameraOptions, loading, fetchLocationChildren };
 }

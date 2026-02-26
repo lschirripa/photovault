@@ -17,6 +17,7 @@ export interface AlbumResponseDTO {
   name: string;
   description: string | null;
   coverAssetId: string | null;
+  coverIsDefault?: boolean;
   coverUrl: string | null;
   createdBy: string;
   createdAt: string;

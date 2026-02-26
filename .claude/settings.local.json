@@ -19,7 +19,9 @@
       "Bash(npm ls:*)",
       "Bash(find:*)",
       "Bash(npm run type-check:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(tail:*)",
+      "Bash(npm audit:*)"
     ]
   },
   "outputStyle": "default"

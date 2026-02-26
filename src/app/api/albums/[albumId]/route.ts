@@ -50,12 +50,34 @@ export async function GET(
       .select("*", { count: "exact", head: true })
       .eq("album_id", albumId);
 
+    // Fallback cover: most recently added media if no explicit cover
+    let effectiveCoverId = album.cover_asset_id;
+    let coverIsDefault = false;
+
+    if (!effectiveCoverId) {
+      const { data: recentMedia } = (await supabase
+        .from("album_media")
+        .select("media_id")
+        .eq("album_id", albumId)
+        .order("added_at", { ascending: false })
+        .limit(1)) as unknown as {
+        data: { media_id: string }[] | null;
+        error: Error | null;
+      };
+
+      if (recentMedia && recentMedia.length > 0) {
+        effectiveCoverId = recentMedia[0].media_id;
+        coverIsDefault = true;
+      }
+    }
+
     const response: AlbumResponseDTO = {
       id: album.id,
       groupId: album.group_id,
       name: album.name,
       description: album.description,
-      coverAssetId: album.cover_asset_id,
+      coverAssetId: effectiveCoverId,
+      coverIsDefault,
       coverUrl: null,
       createdBy: album.created_by,
       createdAt: album.created_at,
@@ -104,23 +126,26 @@ export async function PATCH(
       return NextResponse.json({ error: "Album not found" }, { status: 404 });
     }
 
-    // Check if user is creator or admin
-    const isCreator = album.created_by === user.id;
-    let canUpdate = isCreator;
+    // Verify user is a member of the group
+    const { data: membership } = await supabase
+      .from("group_members")
+      .select("role")
+      .eq("group_id", album.group_id)
+      .eq("user_id", user.id)
+      .single();
 
-    if (!isCreator) {
-      const { data: membership } = await supabase
-        .from("group_members")
-        .select("role")
-        .eq("group_id", album.group_id)
-        .eq("user_id", user.id)
-        .single();
-
-      canUpdate = membership?.role === "owner" || membership?.role === "admin";
+    if (!membership) {
+      return NextResponse.json({ error: "Not a member of this group" }, { status: 403 });
     }
 
-    if (!canUpdate) {
-      return NextResponse.json({ error: "Permission denied" }, { status: 403 });
+    // Name/description changes require creator or admin; cover changes are allowed for any member
+    const wantsNameOrDesc = body.name !== undefined || body.description !== undefined;
+    if (wantsNameOrDesc) {
+      const isCreator = album.created_by === user.id;
+      const isAdmin = membership.role === "owner" || membership.role === "admin";
+      if (!isCreator && !isAdmin) {
+        return NextResponse.json({ error: "Permission denied" }, { status: 403 });
+      }
     }
 
     // Build update object
