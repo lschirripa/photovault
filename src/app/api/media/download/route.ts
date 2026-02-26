@@ -3,6 +3,7 @@ import { createServerComponentClient } from "@/infrastructure/supabase/server";
 import { getStorageService } from "@/infrastructure/cloudflare/r2-storage-service";
 import { getStandardLimiter } from "@/infrastructure/redis/rate-limit";
 import { checkRateLimit } from "@/infrastructure/redis/with-rate-limit";
+import { sanitizeMimeType } from "@/infrastructure/utils/mime";
 import type { Tables } from "@/types/supabase";
 
 export async function GET(request: NextRequest) {
@@ -59,9 +60,10 @@ export async function GET(request: NextRequest) {
 
     return new NextResponse(fileResponse.body, {
       headers: {
-        "Content-Type": asset.mime_type,
+        "Content-Type": sanitizeMimeType(asset.mime_type),
         "Content-Disposition": `attachment; filename="${encodeURIComponent(asset.filename)}"`,
         "Content-Length": String(asset.size_bytes),
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (error) {

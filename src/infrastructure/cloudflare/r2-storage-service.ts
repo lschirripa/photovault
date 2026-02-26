@@ -20,6 +20,13 @@ export class R2StorageService implements IStorageService {
   private bucketName: string;
 
   constructor() {
+    if (!env.r2.accountId || !env.r2.accessKeyId || !env.r2.secretAccessKey) {
+      throw new Error(
+        "R2 storage credentials are not configured. " +
+        "Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY."
+      );
+    }
+
     this.client = new S3Client({
       region: "auto",
       endpoint: `https://${env.r2.accountId}.r2.cloudflarestorage.com`,

@@ -69,6 +69,19 @@ export async function DELETE(
       keysToDelete.push(asset.thumbnail_key);
     }
 
+    // HEIC/HEIF images have a web-optimized JPEG version — delete it too
+    const isHeic = asset.mime_type === "image/heic" || asset.mime_type === "image/heif";
+    if (isHeic) {
+      const parts = asset.original_key.split("/");
+      if (/^\d{4}$/.test(parts[2])) {
+        // New key scheme: media/{groupId}/{YYYY}/{MM}/{assetId}-{filename}
+        keysToDelete.push(`web/${parts[1]}/${parts[2]}/${parts[3]}/${asset.id}.jpg`);
+      } else {
+        // Old key scheme: media/{groupId}/{userId}/{timestamp}-{filename}
+        keysToDelete.push(asset.original_key.replace(/\/([^/]+)\.[^.]+$/, "/web_$1.jpg"));
+      }
+    }
+
     await storageService.deleteObjects(keysToDelete);
 
     // Delete from database

@@ -20,9 +20,9 @@ export const env = {
 
   // Cloudflare R2 (server-only, no NEXT_PUBLIC_ prefix)
   r2: {
-    accountId: serverEnv("R2_ACCOUNT_ID", false),
-    accessKeyId: serverEnv("R2_ACCESS_KEY_ID", false),
-    secretAccessKey: serverEnv("R2_SECRET_ACCESS_KEY", false),
+    accountId: serverEnv("R2_ACCOUNT_ID"),
+    accessKeyId: serverEnv("R2_ACCESS_KEY_ID"),
+    secretAccessKey: serverEnv("R2_SECRET_ACCESS_KEY"),
     bucketName: serverEnv("R2_BUCKET_NAME", false) || "photovault",
     publicUrl: serverEnv("R2_PUBLIC_URL", false),
   },

@@ -8,6 +8,12 @@ export async function POST(request: NextRequest) {
     // Allow either cron secret or authenticated user session
     const authHeader = request.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
+
+    if (!cronSecret && process.env.NODE_ENV === "production") {
+      console.error("CRON_SECRET must be set in production");
+      return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    }
+
     const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
     if (!isCron) {

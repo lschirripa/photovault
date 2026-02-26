@@ -22,8 +22,14 @@ export async function PATCH(
     const body = await request.json();
     const { name, dismissed } = body;
 
-    if (typeof name !== "string" && typeof dismissed !== "boolean") {
-      return NextResponse.json({ error: "Missing name or dismissed" }, { status: 400 });
+    if (name === undefined && dismissed === undefined) {
+      return NextResponse.json({ error: "Must provide name or dismissed" }, { status: 400 });
+    }
+    if (name !== undefined && typeof name !== "string") {
+      return NextResponse.json({ error: "name must be a string" }, { status: 400 });
+    }
+    if (dismissed !== undefined && typeof dismissed !== "boolean") {
+      return NextResponse.json({ error: "dismissed must be a boolean" }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = {};
