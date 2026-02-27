@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { GroupWithStats } from "@/domain/entities/group";
@@ -30,7 +31,7 @@ const roleBadge: Record<MemberRole, { label: string; className: string }> = {
   },
 };
 
-export function GroupCard({ group, coverUrl, isOwner, isPinned, onDelete, onPin }: GroupCardProps) {
+function GroupCardInner({ group, coverUrl, isOwner, isPinned, onDelete, onPin }: GroupCardProps) {
   const badge = roleBadge[group.userRole];
 
   return (
@@ -146,3 +147,6 @@ export function GroupCard({ group, coverUrl, isOwner, isPinned, onDelete, onPin 
     </div>
   );
 }
+
+export const GroupCard = memo(GroupCardInner);
+GroupCard.displayName = "GroupCard";

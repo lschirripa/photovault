@@ -13,22 +13,36 @@ import { GroupHero } from "@/presentation/components/groups/group-hero";
 
 export default function GroupsPage() {
   const { user, loading: authLoading } = useAuth();
-  const { groups, loading, error, fetchGroups, createGroup, deleteGroup } = useGroups();
-  const { pinnedGroupId, pinnedMediaIds, fetchPinnedGroup, pinGroup, unpinGroup } = usePinnedGroup();
+  const { groups, loading, error, fetchGroups, createGroup, deleteGroup } =
+    useGroups();
+  const {
+    pinnedGroupId,
+    pinnedMediaIds,
+    fetchPinnedGroup,
+    pinGroup,
+    unpinGroup,
+  } = usePinnedGroup();
   const { fetchUrls } = useUrlCache();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDescription, setNewGroupDescription] = useState("");
-  const [deleteConfirmGroupId, setDeleteConfirmGroupId] = useState<string | null>(null);
+  const [deleteConfirmGroupId, setDeleteConfirmGroupId] = useState<
+    string | null
+  >(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
-  const [heroThumbnailUrls, setHeroThumbnailUrls] = useState<Record<string, string>>({});
+  const [heroThumbnailUrls, setHeroThumbnailUrls] = useState<
+    Record<string, string>
+  >({});
 
   // Find the pinned group object
   const pinnedGroup = useMemo(
-    () => (pinnedGroupId ? groups.find((g) => g.id === pinnedGroupId) ?? null : null),
-    [groups, pinnedGroupId]
+    () =>
+      pinnedGroupId
+        ? (groups.find((g) => g.id === pinnedGroupId) ?? null)
+        : null,
+    [groups, pinnedGroupId],
   );
 
   // Fetch groups + pinned group on mount
@@ -92,7 +106,7 @@ export default function GroupsPage() {
         await pinGroup(groupId);
       }
     },
-    [pinnedGroupId, pinGroup, unpinGroup]
+    [pinnedGroupId, pinGroup, unpinGroup],
   );
 
   if (authLoading) {
@@ -132,9 +146,7 @@ export default function GroupsPage() {
         {/* Header */}
         <header className="flex justify-between items-center">
           <h1 className="text-2xl font-bold tracking-tight">My Groups</h1>
-          <Button onClick={() => setShowCreateModal(true)}>
-            Create Group
-          </Button>
+          <Button onClick={() => setShowCreateModal(true)}>Create Group</Button>
         </header>
 
         {/* Error */}
@@ -172,7 +184,11 @@ export default function GroupsPage() {
               <GroupCard
                 key={group.id}
                 group={group}
-                coverUrl={group.coverMediaId ? coverUrls[group.coverMediaId] ?? null : null}
+                coverUrl={
+                  group.coverMediaId
+                    ? (coverUrls[group.coverMediaId] ?? null)
+                    : null
+                }
                 isOwner={group.userRole === MemberRole.OWNER}
                 isPinned={pinnedGroupId === group.id}
                 onDelete={() => setDeleteConfirmGroupId(group.id)}
@@ -181,7 +197,6 @@ export default function GroupsPage() {
             ))}
           </div>
         )}
-
       </div>
 
       {/* Create Group Modal */}
@@ -191,7 +206,10 @@ export default function GroupsPage() {
             <h2 className="text-xl font-semibold mb-4">Create New Group</h2>
             <form onSubmit={handleCreateGroup} className="space-y-4">
               <div>
-                <label htmlFor="groupName" className="block text-sm font-medium mb-1">
+                <label
+                  htmlFor="groupName"
+                  className="block text-sm font-medium mb-1"
+                >
                   Group Name
                 </label>
                 <input
@@ -204,7 +222,10 @@ export default function GroupsPage() {
                 />
               </div>
               <div>
-                <label htmlFor="groupDescription" className="block text-sm font-medium mb-1">
+                <label
+                  htmlFor="groupDescription"
+                  className="block text-sm font-medium mb-1"
+                >
                   Description (optional)
                 </label>
                 <textarea
@@ -242,10 +263,13 @@ export default function GroupsPage() {
       {deleteConfirmGroupId && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-background border border-gray-200 dark:border-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md">
-            <h2 className="text-xl font-semibold mb-4 text-red-600">Delete Group</h2>
+            <h2 className="text-xl font-semibold mb-4 text-red-600">
+              Delete Group
+            </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Are you sure you want to delete this group? This action cannot be undone
-              and will permanently delete all photos and videos in this group.
+              Are you sure you want to delete this group? This action cannot be
+              undone and will permanently delete all photos and videos in this
+              group.
             </p>
             <div className="flex gap-3">
               <Button
