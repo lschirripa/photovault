@@ -71,6 +71,8 @@ export async function POST(request: NextRequest) {
     };
 
     // Add files to the archive, streaming each one
+    const skippedFiles: string[] = [];
+
     for (const asset of assets) {
       try {
         const downloadUrl = await storageService.generateDownloadUrl(
@@ -83,11 +85,27 @@ export async function POST(request: NextRequest) {
           const uniqueFilename = getUniqueFilename(asset.filename);
           const nodeStream = Readable.fromWeb(response.body as import("stream/web").ReadableStream);
           archive.append(nodeStream, { name: uniqueFilename });
+        } else {
+          skippedFiles.push(asset.filename);
         }
       } catch (err) {
         console.error(`Failed to fetch asset ${asset.id}:`, err);
-        // Continue with other files
+        skippedFiles.push(asset.filename);
       }
+    }
+
+    // If all files failed, return an error instead of an empty zip
+    if (skippedFiles.length === assets.length) {
+      return NextResponse.json(
+        { error: "Failed to fetch any files for download" },
+        { status: 500 }
+      );
+    }
+
+    // Include a manifest of skipped files so the user knows what's missing
+    if (skippedFiles.length > 0) {
+      const manifest = `The following files could not be included:\n\n${skippedFiles.join("\n")}\n`;
+      archive.append(manifest, { name: "_skipped_files.txt" });
     }
 
     // Finalize the archive

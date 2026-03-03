@@ -61,15 +61,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Reassign all detected faces from source to target
-    await supabase
+    // Step 1: Reassign all detected faces from source to target
+    const { error: reassignError } = (await supabase
       .from("detected_faces")
       .update({ person_id: targetId })
-      .eq("person_id", sourceId);
+      .eq("person_id", sourceId)) as unknown as { error: Error | null };
 
-    // Recalculate target centroid as weighted average
+    if (reassignError) {
+      console.error("Merge: face reassignment failed:", reassignError);
+      return NextResponse.json(
+        { error: "Failed to reassign faces" },
+        { status: 500 }
+      );
+    }
+
+    // Step 2: Recalculate target centroid as weighted average
     const sourceCentroid = parsePgVector(source.centroid);
     const targetCentroid = parsePgVector(target.centroid);
+
+    if (!sourceCentroid || !targetCentroid) {
+      // Rollback: reassign faces back to source
+      await supabase
+        .from("detected_faces")
+        .update({ person_id: sourceId })
+        .eq("person_id", targetId);
+
+      return NextResponse.json(
+        { error: "Invalid centroid data" },
+        { status: 500 }
+      );
+    }
+
     const sn = source.face_count;
     const tn = target.face_count;
     const totalCount = sn + tn;
@@ -84,17 +106,40 @@ export async function POST(request: NextRequest) {
       ? mergedCentroid.map((x) => x / norm)
       : mergedCentroid;
 
-    // Update target with merged centroid and combined face count
-    await supabase
+    // Step 3: Update target with merged centroid and combined face count
+    const { error: updateError } = (await supabase
       .from("persons")
       .update({
         centroid: `[${normalizedCentroid.join(",")}]`,
         face_count: totalCount,
       })
-      .eq("id", targetId);
+      .eq("id", targetId)) as unknown as { error: Error | null };
 
-    // Delete source person
-    await supabase.from("persons").delete().eq("id", sourceId);
+    if (updateError) {
+      // Rollback: reassign faces back to source
+      await supabase
+        .from("detected_faces")
+        .update({ person_id: sourceId })
+        .eq("person_id", targetId);
+
+      console.error("Merge: centroid update failed:", updateError);
+      return NextResponse.json(
+        { error: "Failed to update merged person" },
+        { status: 500 }
+      );
+    }
+
+    // Step 4: Delete source person
+    const { error: deleteError } = await supabase
+      .from("persons")
+      .delete()
+      .eq("id", sourceId);
+
+    if (deleteError) {
+      // Non-fatal: source person is now empty (0 faces) and will be cleaned
+      // up by the face_count trigger or next cleanup cycle.
+      console.error("Merge: source deletion failed (non-fatal):", deleteError);
+    }
 
     return NextResponse.json({
       success: true,
@@ -110,7 +155,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function parsePgVector(vecStr: string): number[] {
-  const cleaned = vecStr.replace(/^\[|\]$/g, "");
-  return cleaned.split(",").map(Number);
+function parsePgVector(vecStr: string): number[] | null {
+  try {
+    const cleaned = vecStr.replace(/^\[|\]$/g, "");
+    const nums = cleaned.split(",").map(Number);
+    if (nums.some(isNaN) || nums.length === 0) return null;
+    return nums;
+  } catch {
+    return null;
+  }
 }

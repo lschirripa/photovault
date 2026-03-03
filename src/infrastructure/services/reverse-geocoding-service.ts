@@ -15,12 +15,18 @@ export async function reverseGeocode(
 ): Promise<GeocodingResult | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=10`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(url, {
       headers: {
         "User-Agent": "PhotoVault/1.0",
         "Accept-Language": "en",
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) return null;
 

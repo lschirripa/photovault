@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/presentation/providers/auth-provider";
 import { ActivityDropdown } from "@/presentation/components/groups/activity-dropdown";
+import { ErrorBoundary } from "@/presentation/components/ui/error-boundary";
 
 export default function DashboardLayout({
   children,
@@ -77,7 +78,7 @@ export default function DashboardLayout({
           </div>
         </div>
       </nav>
-      <main>{children}</main>
+      <main><ErrorBoundary>{children}</ErrorBoundary></main>
     </div>
   );
 }

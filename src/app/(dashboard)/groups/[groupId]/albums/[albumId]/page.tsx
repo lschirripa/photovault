@@ -485,9 +485,13 @@ export default function AlbumDetailPage() {
               setAlbum((prev) => prev ? { ...prev, coverAssetId: assetId, coverIsDefault: false } : prev);
               setCoverToastMessage("Album cover updated");
               setCoverToastVisible(true);
+            } else {
+              setCoverToastMessage("Failed to update album cover");
+              setCoverToastVisible(true);
             }
-          } catch (err) {
-            console.error("Set album cover error:", err);
+          } catch {
+            setCoverToastMessage("Failed to update album cover");
+            setCoverToastVisible(true);
           }
         }}
       />

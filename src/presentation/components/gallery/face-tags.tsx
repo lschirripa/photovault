@@ -100,8 +100,11 @@ export function FaceTags({ assetId, groupId }: FaceTagsProps) {
     }
   };
 
+  const [reassignError, setReassignError] = useState<string | null>(null);
+
   const handleReassign = async (faceId: string, targetPersonId: string) => {
     setReassigning(faceId);
+    setReassignError(null);
     try {
       const res = await fetch(`/api/detected-faces/${faceId}`, {
         method: "PATCH",
@@ -109,11 +112,14 @@ export function FaceTags({ assetId, groupId }: FaceTagsProps) {
         body: JSON.stringify({ targetPersonId }),
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        setReassignError("Failed to reassign face");
+        return;
+      }
 
       const result = await res.json();
 
-      // Update face in local state
+      // Update face in local state only after server confirms
       setFaces((prev) =>
         prev.map((f) => {
           if (f.id !== faceId) return f;
@@ -128,7 +134,7 @@ export function FaceTags({ assetId, groupId }: FaceTagsProps) {
 
       setActiveFaceId(null);
     } catch {
-      // silently fail
+      setReassignError("Failed to reassign face");
     } finally {
       setReassigning(null);
     }
@@ -139,6 +145,11 @@ export function FaceTags({ assetId, groupId }: FaceTagsProps) {
 
   return (
     <div className="px-4 pb-2">
+      {reassignError && (
+        <div className="text-center mb-1">
+          <span className="text-xs text-red-400">{reassignError}</span>
+        </div>
+      )}
       <div className="flex items-center gap-2 justify-center flex-wrap">
         <span className="text-xs text-gray-400 mr-1">Faces:</span>
         {faces.map((face) => (
